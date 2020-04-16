@@ -12,7 +12,6 @@
 #' @export
 spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 	require(rstan)
-	require()
 
 	### Extract important values from the input object
 	y <-  spi_input$data$precip
