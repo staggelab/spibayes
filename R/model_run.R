@@ -124,7 +124,7 @@ model {
 '
 		### Fit the model
 		model_fit <- rstan::stan(model_code = cyclic_model, 
-			data = data, 
+			data = data_fitting, 
 			init = init_vals,
 			iter = iter, 
 			chains = n_chains,
