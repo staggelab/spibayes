@@ -123,8 +123,8 @@ transformed data {
  
 }
 parameters {
-  real<lower=0> b_0_mean;
-  real<lower=0> b_0_scale;  
+  real b_0_mean;
+  real b_0_scale;  
   
   vector[basis_dim] b_mean;  
   vector[basis_dim] b_scale;   
