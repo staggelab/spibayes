@@ -157,7 +157,7 @@ model {
    b_disp ~ multi_normal_prec(zero,K_disp); 
   
   // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter
-  y ~ gamma(rep_vector(1, N) ./ exp(disp_param), rep_vector(1, N) ./ ( mean_param * disp_param)) ;  // shape is 1 over disp, scale is mean over shape or 1 over mean times disp
+  y ~ gamma(rep_vector(1, N) ./ exp(disp_param), rep_vector(1, N) ./ ( mean_param /* disp_param)) ;  // shape is 1 over disp, scale is mean over shape or 1 over mean times disp
  
 }
 generated quantities { }
