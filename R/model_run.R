@@ -30,20 +30,20 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 		y= y, 
 		X = X,  
 		b_0_mean_prior=spi_input$b_0$mean, 
-		b_0_scale_prior=spi_input$b_0$scale)
+		b_0_disp_prior=spi_input$b_0$disp)
 	
 	### Use the estimated lambda or 100 - whichever is smaller
 	lambda_mean_init <- sapply(spi_input$lambda_init$mean, function(x){min(x, 100)})
-	lambda_scale_init <- sapply(spi_input$lambda_init$scale, function(x){min(x, 100)})
+	lambda_disp_init <- sapply(spi_input$lambda_init$disp, function(x){min(x, 100)})
 
 	### Create the initial values
 	init_vals <- list(list(
 		b_0_mean = spi_input$b_0$mean[1], 
-		b_0_scale = spi_input$b_0$scale[1], 
+		b_0_disp = spi_input$b_0$disp[1], 
 		b_mean = spi_input$b_init$mean, 
-		b_scale = spi_input$b_init$scale, 
+		b_disp = spi_input$b_init$disp, 
 		lambda_mean = lambda_mean_init, 
-		lambda_scale = lambda_scale_init)
+		lambda_disp = lambda_disp_init)
 	)
 
 	### Loop through the initial values if we have more than one chain
@@ -52,7 +52,7 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 		for (j in seq(2, n_chains)) {
 			init_vals[[j]] <- init_vals[[1]]
 			init_vals[[j]]$lambda_mean <- lambda_mean_init*(10^runif(1, -2,2))
-			init_vals[[j]]$lambda_scale <- lambda_scale_init*(10^runif(1, -2,2))
+			init_vals[[j]]$lambda_disp <- lambda_disp_init*(10^runif(1, -2,2))
 		}	
 	}
 
