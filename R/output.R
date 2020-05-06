@@ -1,3 +1,4 @@
+
 #' Extract model output parameters
 #'
 #' This is where you describe the function itself
@@ -9,33 +10,54 @@
 #' @param knot_loc List of knot locations
 #' @return A matrix of the infile
 #' @export
-extract_params <- function(model_fit, basis){
-
-	### Extract basis 
-	basis_reparam <- cbind(rep(1,dim(basis$x_reparam)[1]), basis$x_reparam)
-	data <- basis$data
+extract_params <- function(model_fit, basis, newdata = NULL){
+	### Extract type
 	type <- basis$type
 
 	### Extract the spline coefficients and intercept for mean
 	b_mean <- extract(model_fit, "b_mean")$b_mean
 	b_0_mean <- extract(model_fit, "b_0_mean")$b_0_mean
+	### Convert to original basis
+	b_mean_orig <- t(apply(b_mean, 1, function(x){basis$z %*% x}))
 	### Combine the intercept and spline coefficients into a single matrix
-	b_full_mean <- cbind(matrix(b_0_mean, dim(b_mean)[1], 1), b_mean)
+	b_full_mean <- cbind(matrix(b_0_mean, dim(b_mean_orig)[1], 1), b_mean_orig)
 
 	### Extract the spline coefficients and intercept for scale
 	b_scale <- extract(model_fit, "b_scale")$b_scale
 	b_0_scale <- extract(model_fit, "b_0_scale")$b_0_scale
+	### Convert to original basis
+	b_scale_orig <- t(apply(b_scale, 1, function(x){basis$z %*% x}))
 	### Combine the intercept and spline coefficients into a single matrix
-	b_full_scale <- cbind(matrix(b_0_scale, dim(b_scale)[1], 1), b_scale)
+	b_full_scale <- cbind(matrix(b_0_scale, dim(b_scale_orig)[1], 1), b_scale_orig)
+
+	### If new data isn't provided, assume it is the data used to fit the model
+	if(is.null(newdata)){
+		x_orig <- cbind(1, basis$x_orig)
+		newdata <- basis$data%>%
+			mutate(data = "original") 
+	} else {
+		newdata <- newdata %>%
+			mutate(data = "newdata") %>%
+			bind_rows(mutate(basis$data, data = "original"))
+
+		basis_newdata <- create_basis(data = newdata, type = basis$type, knot_loc = basis$knot_loc)
+		x_orig <- cbind(1, basis_newdata$x_orig)
+
+		newdata_test <- newdata$data == "newdata"
+
+		x_orig <- x_orig[newdata_test, ]
+		newdata <- newdata[newdata_test,]
+	}
 
 	### Calculate the estimate of mean and scale for the demo basis
-	b_mean_est <- exp(basis_reparam %*% t(b_full_mean))
-	b_scale_est <- exp(basis_reparam %*% t(b_full_scale))
+	b_mean_est <- exp(x_orig %*% t(b_full_mean))
+	b_scale_est <- exp(x_orig %*% t(b_full_scale))
 
 	### Gather the results into a long dataframe
-	mean_est <- data.frame(demo_basis$data, b_mean_est) %>%
+	mean_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_mean_est) %>%
+		#select("jdate", "year", "mean") %>%
 		pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="mean") 
-	scale_est <- data.frame(demo_basis$data, b_scale_est) %>%
+	scale_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_scale_est)  %>%
 		pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="scale") 
 
 	### Add in the derived parameters
@@ -44,8 +66,10 @@ extract_params <- function(model_fit, basis){
 		mutate(shape = mean * rate) %>%
 		mutate(disp = 1/shape) 
 
-	return(param_est)
+	return(list(param_est = param_est, b_mean = b_full_mean, b_scale = b_full_scale))
 }
+
+
 
 
 #' Convert parameter estimate to long format

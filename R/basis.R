@@ -61,7 +61,7 @@ create_cyclic_basis <- function(data, knot_loc){
 	X_reparam <- X_orig%*%Z
 
 	### Create the output and return
-	output_list <- list(x_orig = X_orig, x_reparam = X_reparam, z = Z, s_reparam = s_reparam)
+	output_list <- list(x_orig = X_orig, x_reparam = X_reparam, z = Z, s_reparam = s_reparam, c = C, qrc = qrc)
 	return(output_list)
 }
 
@@ -105,7 +105,7 @@ create_tensor_basis <- function(data, knot_loc){
 	X_reparam <- X_orig%*%Z
 
 	### Create the output and return
-	output_list <- list(x_orig = X_orig, x_reparam = X_reparam, z = Z, s_reparam = s_reparam)
+	output_list <- list(x_orig = X_orig, x_reparam = X_reparam, z = Z, s_reparam = s_reparam, c = C, qrc = qrc)
 	return(output_list)
 }
 
