@@ -4,7 +4,7 @@
 \alias{extract_params}
 \title{Extract model output parameters}
 \usage{
-extract_params(model_fit, basis)
+extract_params(model_fit, basis, newdata = NULL)
 }
 \arguments{
 \item{data}{Dataframe with the underlying data. Columns must include variable names}
