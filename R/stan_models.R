@@ -42,8 +42,8 @@ transformed parameters {
   matrix[basis_dim, basis_dim] K_mean; 
   matrix[basis_dim, basis_dim] K_scale; 
   
-  vector[N] mean_param;  
-  vector[N] scale_param;
+  vector<lower=0>[N] mean_param;  
+  vector<lower=0>[N] scale_param;
   
   K_mean = S * lambda_mean ;
   K_scale = S * lambda_scale ;
@@ -136,8 +136,8 @@ transformed parameters {
   matrix[basis_dim, basis_dim] K_mean; 
   matrix[basis_dim, basis_dim] K_scale; 
   
-  vector[N] mean_param;  
-  vector[N] scale_param;
+  vector<lower=0>[N] mean_param;  
+  vector<lower=0>[N] scale_param;
   
   K_mean = S_1 * lambda_mean[1]  + S_2 * lambda_mean[2] + S_3 * lambda_mean[3] ;
   K_scale = S_1 * lambda_scale[1]  + S_2 * lambda_scale[2] + S_3 * lambda_scale[3] ;
