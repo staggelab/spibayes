@@ -157,27 +157,9 @@ model {
    b_scale ~ multi_normal_prec(zero,K_scale); 
   
   // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter
-  y ~ gamma(exp(mean_param) ./ exp(scale_param), rep_vector(1, N) ./ exp(scale_param));  // shape is mean over scale, rate is 1 over scale
+  y ~ gamma(mean_param ./ scale_param, rep_vector(1, N) ./ scale_param);  // shape is mean over scale, rate is 1 over scale
  
 }
 generated quantities {
-  //vector[N] mean_est;
-  //vector[N] scale_est;
-  //vector[N] shape_est;   
-  //vector[N] rate_est;  
-  //real rho_mean;
-  //real rho_scale;
-  
-  //mean_est = exp(mean_param);
-  //scale_est = exp(scale_param);
-  
-  //shape_est = mean_param ./ exp(scale_param);
-  //rate_est = rep_vector(1, N) ./ exp(scale_param);
-  
- // rho_mean = log(lambda_mean);
- // rho_scale = log(lambda_scale);
 }
 '
-
-
-

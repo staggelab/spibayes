@@ -48,19 +48,19 @@ prior_cyclic <- function(data, knot_loc ){
 		dplyr::ungroup()
 
 	### Fit a cyclic spline model using mgcv
-	log_mean <- mgcv::gam(log(mean) ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
-	log_scale <- mgcv::gam(log(scale) ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
+	mean_model <- mgcv::gam(mean ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
+	scale_model <- mgcv::gam(scale ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
 	
 	### Create the prior for the mean intercept
-	b_0_mean_prior <- c(summary(log_mean)$p.table[1], summary(log_mean)$p.table[2])
-	b_0_scale_prior <- c(summary(log_scale)$p.table[1], summary(log_scale)$p.table[2])
+	b_0_mean_prior <- c(summary(mean_model)$p.table[1], summary(mean_model)$p.table[2])
+	b_0_scale_prior <- c(summary(scale_model)$p.table[1], summary(scale_model)$p.table[2])
 
 	### Create a vector for intializing the mean
-	b_mean_init <- c(coef(log_mean)[2:length(coef(log_mean))])
-	b_scale_init <- c(coef(log_scale)[2:length(coef(log_scale))])
+	b_mean_init <- c(coef(mean_model)[2:length(coef(mean_model))])
+	b_scale_init <- c(coef(scale_model)[2:length(coef(scale_model))])
 
-	lambda_mean_init <- unname(c(log_mean$sp ))
-	lambda_scale_init <- unname(c(log_scale$sp))
+	lambda_mean_init <- unname(c(mean_model$sp ))
+	lambda_scale_init <- unname(c(scale_model$sp))
 
 	### Create output list and return
 	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior), b_init = list(mean = b_mean_init, scale = b_scale_init), lambda_init = list(mean = lambda_mean_init, scale = lambda_scale_init))
@@ -108,19 +108,19 @@ prior_tensor <- function(data, knot_loc ){
 		select(-period)
 
 	### Fit a tensor product spline model using mgcv
-	log_mean <- mgcv::gam(log(mean) ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
-	log_scale <- mgcv::gam(log(scale) ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
+	mean_model <- mgcv::gam(mean ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
+	scale_model <- mgcv::gam(scale ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
 
 	### Create the prior for the mean intercept
-	b_0_mean_prior <- c(summary(log_mean)$p.table[1], summary(log_mean)$p.table[2])
-	b_0_scale_prior <- c(summary(log_scale)$p.table[1], summary(log_scale)$p.table[2])
+	b_0_mean_prior <- c(summary(mean_model)$p.table[1], summary(mean_model)$p.table[2])
+	b_0_scale_prior <- c(summary(scale_model)$p.table[1], summary(scale_model)$p.table[2])
 
 	### Create a vector for intializing the mean
-	b_mean_init <- c(coef(log_mean)[2:length(coef(log_mean))])
-	b_scale_init <- c(coef(log_scale)[2:length(coef(log_scale))])
+	b_mean_init <- c(coef(mean_model)[2:length(coef(mean_model))])
+	b_scale_init <- c(coef(scale_model)[2:length(coef(scale_model))])
 
-	lambda_mean_init <- unname(c(log_mean$sp ))
-	lambda_scale_init <- unname(c(log_scale$sp))
+	lambda_mean_init <- unname(c(mean_model$sp ))
+	lambda_scale_init <- unname(c(scale_model$sp))
 
 	### Create output list and return
 	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior), b_init = list(mean = b_mean_init, scale = b_scale_init), lambda_init = list(mean = lambda_mean_init, scale = lambda_scale_init))

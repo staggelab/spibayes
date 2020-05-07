@@ -50,8 +50,8 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 	}
 
 	### Calculate the estimate of mean and scale for the demo basis
-	b_mean_est <- exp(x_orig %*% t(b_full_mean))
-	b_scale_est <- exp(x_orig %*% t(b_full_scale))
+	b_mean_est <- x_orig %*% t(b_full_mean)
+	b_scale_est <- x_orig %*% t(b_full_scale)
 
 	### Gather the results into a long dataframe
 	mean_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_mean_est) %>%
