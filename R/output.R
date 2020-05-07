@@ -22,13 +22,13 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 	### Combine the intercept and spline coefficients into a single matrix
 	b_full_mean <- cbind(matrix(b_0_mean, dim(b_mean_orig)[1], 1), b_mean_orig)
 
-	### Extract the spline coefficients and intercept for scale
-	b_scale <- extract(model_fit, "b_scale")$b_scale
-	b_0_scale <- extract(model_fit, "b_0_scale")$b_0_scale
+	### Extract the spline coefficients and intercept for disp
+	b_disp <- extract(model_fit, "b_disp")$b_disp
+	b_0_disp <- extract(model_fit, "b_0_disp")$b_0_disp
 	### Convert to original basis
-	b_scale_orig <- t(apply(b_scale, 1, function(x){basis$z %*% x}))
+	b_disp_orig <- t(apply(b_disp, 1, function(x){basis$z %*% x}))
 	### Combine the intercept and spline coefficients into a single matrix
-	b_full_scale <- cbind(matrix(b_0_scale, dim(b_scale_orig)[1], 1), b_scale_orig)
+	b_full_disp <- cbind(matrix(b_0_disp, dim(b_disp_orig)[1], 1), b_disp_orig)
 
 	### If new data isn't provided, assume it is the data used to fit the model
 	if(is.null(newdata)){
@@ -49,24 +49,24 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 		newdata <- newdata[newdata_test,]
 	}
 
-	### Calculate the estimate of mean and scale for the demo basis
-	b_mean_est <- exp(x_orig %*% t(b_full_mean))
-	b_scale_est <- exp(x_orig %*% t(b_full_scale))
+	### Calculate the estimate of mean and disp for the demo basis
+	b_mean_est <- x_orig %*% t(b_full_mean)
+	b_disp_est <- x_orig %*% t(b_full_disp)
 
 	### Gather the results into a long dataframe
 	mean_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_mean_est) %>%
 		#select("jdate", "year", "mean") %>%
 		pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="mean") 
-	scale_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_scale_est)  %>%
-		pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="scale") 
+	disp_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_disp_est)  %>%
+		pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="disp") 
 
 	### Add in the derived parameters
-	param_est <- full_join(mean_est, scale_est) %>%
-		mutate(rate = 1/scale) %>%
-		mutate(shape = mean * rate) %>%
-		mutate(disp = 1/shape) 
+	param_est <- full_join(mean_est, disp_est) %>%
+		mutate(shape = 1/disp) %>%
+		mutate(scale = mean / shape) %>%
+		mutate(rate = 1/scale) 
 
-	return(list(param_est = param_est, b_mean = b_full_mean, b_scale = b_full_scale))
+	return(list(param_est = param_est, b_mean = b_full_mean, b_disp = b_full_disp))
 }
 
 
