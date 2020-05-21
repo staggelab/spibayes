@@ -143,7 +143,7 @@ transformed parameters {
   K_scale = S_1 * lambda_scale[1]  + S_2 * lambda_scale[2] + S_3 * lambda_scale[3] ;
    
   mean_param = to_vector(X * b_mean) + b_0_mean;
-  scale_param = to_vector(X * b_scale) + b_0_scale;
+  scale_param = (to_vector(X * b_scale) + b_0_scale);
 } 
 model {
  

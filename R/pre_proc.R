@@ -86,9 +86,26 @@ prior_tensor <- function(data, knot_loc ){
 	n_knots <- sapply(knot_loc, FUN = length)
 	
 	### Create MLE estimate. This will be used to set priors and initial values
-	### Do this in 30 year subsets
+	### Create preliminary periods based on knot locations
+	year_cuts <- unique(c(min(data$year, na.rm=TRUE),knot_loc$year, max(data$year, na.rm=TRUE)))
+	year_cuts <- c(0, year_cuts)
+
+	### Check how many observations 
+	countbycut <- data %>% 
+		drop_na(precip) %>%
+		mutate(period = cut(year, year_cuts)) %>%
+		group_by(period, .drop = FALSE) %>% 
+		count() %>%
+		ungroup() 
+
+	### Merge periods that have zero observations or less than 4 years
+	nonzero_test <- c(TRUE, countbycut$n != 0)
+	multiyear_test <- c(TRUE, countbycut$n > (365*4))
+	year_cuts <- year_cuts[nonzero_test & multiyear_test]
+
+	### Cut data to periods and generate MLE estiamtes for the gamma distribution
 	data <- data %>%
-		mutate(period = cut(year, seq(0,2200, 30))) 
+		mutate(period = cut(year, year_cuts)) 
 
 	mle_fit <- data %>%
 		dplyr::group_by(jdate, period) %>%
@@ -108,8 +125,8 @@ prior_tensor <- function(data, knot_loc ){
 		select(-period)
 
 	### Fit a tensor product spline model using mgcv
-	mean_model <- mgcv::gam(mean ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
-	scale_model <- mgcv::gam(scale ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
+	mean_model <- mgcv::gam(mean ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=FALSE)
+	scale_model <- mgcv::gam(scale ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=FALSE)
 
 	### Create the prior for the mean intercept
 	b_0_mean_prior <- c(summary(mean_model)$p.table[1], summary(mean_model)$p.table[2])
