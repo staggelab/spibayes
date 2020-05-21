@@ -147,8 +147,8 @@ transformed parameters {
 } 
 model {
  
-  lambda_mean ~ gamma(0.05,0.005);
-  lambda_scale ~ gamma(0.05,0.005);
+  lambda_mean ~ gamma(50*0.01,0.01);
+  lambda_scale ~ gamma(50*0.01,0.01);
 	
    b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
    b_mean ~ multi_normal_prec(zero,K_mean); 
