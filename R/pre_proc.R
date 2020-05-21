@@ -125,8 +125,8 @@ prior_tensor <- function(data, knot_loc ){
 		select(-period)
 
 	### Fit a tensor product spline model using mgcv
-	mean_model <- mgcv::gam(mean ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=FALSE)
-	scale_model <- mgcv::gam(scale ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=FALSE)
+	mean_model <- mgcv::gam(mean ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
+	scale_model <- mgcv::gam(scale ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
 
 	### Create the prior for the mean intercept
 	b_0_mean_prior <- c(summary(mean_model)$p.table[1], summary(mean_model)$p.table[2])
