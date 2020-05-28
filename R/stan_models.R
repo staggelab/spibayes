@@ -22,11 +22,15 @@ data {
   vector[2] b_0_mean_prior; 
   vector[2] b_0_scale_prior; 
   
+  vector[basis_dim] b_mean_prior; 
+  vector[basis_dim] b_scale_prior; 
+
+  vector[2] lambda_mean_prior; 
+  vector[2] lambda_scale_prior; 
  }
 transformed data {  
- vector[basis_dim] zero; 
- zero = rep_vector(0, basis_dim) ;
- 
+ // vector[basis_dim] zero; 
+ // zero = rep_vector(0, basis_dim) ;
 }
 parameters {
   real b_0_mean;
@@ -53,19 +57,19 @@ transformed parameters {
 } 
 model {
  
-  //lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
-  //lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
-  lambda_mean ~ gamma(0.05,0.005);
-  lambda_scale ~ gamma(0.05,0.005);
+  lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
+  lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
+  //lambda_mean ~ gamma(0.05,0.005);
+  //lambda_scale ~ gamma(0.05,0.005);
 	
    b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
-   b_mean ~ multi_normal_prec(zero,K_mean); 
+   b_mean ~ multi_normal_prec(b_mean_prior,K_mean); 
  
    b_0_scale  ~ normal(b_0_scale_prior[1],b_0_scale_prior[2]);  
-   b_scale ~ multi_normal_prec(zero,K_scale); 
+   b_scale ~ multi_normal_prec(b_scale_prior,K_scale); 
   
   // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter
-  y ~ gamma(exp(mean_param) ./ exp(scale_param), rep_vector(1, N) ./ exp(scale_param));  // shape is mean over scale, rate is 1 over scale
+  y ~ gamma(mean_param ./ scale_param, rep_vector(1, N) ./ scale_param);  // shape is mean over scale, rate is 1 over scale
  
 }
 generated quantities {

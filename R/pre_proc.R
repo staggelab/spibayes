@@ -36,20 +36,30 @@ prior_cyclic <- function(data, knot_loc ){
 	### Extract the number of knots
 	n_knots <- sapply(knot_loc, FUN = length)
 	
+	### How many years of data to sample from MLE estimate
+	if("year" %in% colnames(data)) {
+		n_years <- length(unique(data$year))
+	} else {
+		n_years <- length(unique(lubridate::year(data$date)))
+	}
+
 	### Create MLE estimate
 	### Fit each day with MLE
-	mle_fit <- data %>%
-		dplyr::group_by(jdate) %>%
-		dplyr::filter(precip > 0) %>%
-		dplyr::summarise(shape = fitdistrplus::fitdist(precip, "gamma")[[1]][[1]], rate = fitdistrplus::fitdist(precip, "gamma")[[1]][[2]]) %>%
-		dplyr::mutate(scale = 1/rate) %>%
-		dplyr::mutate(mean = scale * shape) %>%
-		dplyr::mutate(disp = 1/shape) %>%
-		dplyr::ungroup()
+	mle_fit <- mle_gamma_fit(jdate = data$jdate, values = data$precip, n = n_years)
+	
+
+	#mle_fit <- data %>%
+	#	dplyr::group_by(jdate) %>%
+	#	dplyr::filter(precip > 0) %>%
+	#	dplyr::summarise(shape = fitdistrplus::fitdist(precip, "gamma")[[1]][[1]], rate = fitdistrplus::fitdist(precip, "gamma")[[1]][[2]]) %>%
+	#	dplyr::mutate(scale = 1/rate) %>%
+	#	dplyr::mutate(mean = scale * shape) %>%
+	#	dplyr::mutate(disp = 1/shape) %>%
+	#	dplyr::ungroup()
 
 	### Fit a cyclic spline model using mgcv
-	mean_model <- mgcv::gam(mean ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
-	scale_model <- mgcv::gam(scale ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit, knots = knot_loc, select=TRUE)
+	mean_model <- mgcv::gam(mean ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
+	scale_model <- mgcv::gam(scale ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
 	
 	### Create the prior for the mean intercept
 	b_0_mean_prior <- c(summary(mean_model)$p.table[1], summary(mean_model)$p.table[2])
@@ -59,11 +69,35 @@ prior_cyclic <- function(data, knot_loc ){
 	b_mean_init <- c(coef(mean_model)[2:length(coef(mean_model))])
 	b_scale_init <- c(coef(scale_model)[2:length(coef(scale_model))])
 
+	### Extract smoothing penalty
 	lambda_mean_init <- unname(c(mean_model$sp ))
 	lambda_scale_init <- unname(c(scale_model$sp))
 
+	### Calculate alpha the rescaling factor and then rescale
+	mean_alpha <- sapply(mean_model$smooth, "[[", "S.scale") / lambda_mean_init
+	lambda_mean_init <- lambda_mean_init / mean_alpha
+
+	scale_alpha <- sapply(scale_model$smooth, "[[", "S.scale") / lambda_scale_init
+	lambda_scale_init <- lambda_scale_init / scale_alpha
+
+	### Extract penalty matrix
+	s_matrix <- mean_model$smooth[[1]]$S[[1]]
+	s_inv <- MASS::ginv(s_matrix)
+
+	### Rescale to match standard devs
+	### Might not need to do this
+	mean_samples <- mvrnorm(n=100, b_mean_init, s_inv)
+	scale_samples <- mvrnorm(n=100, b_scale_init, s_inv)
+
+	lambda_mean <- 1/((sd(b_mean_init)/mean(apply(mean_samples, 1, sd)))^2)
+	lambda_scale <- 1/((sd(b_scale_init)/mean(apply(scale_samples, 1, sd)))^2)
+
+	#mean_testing <- mvrnorm(n=100, b_mean_init, s_inv/lambda_mean)
+	#scale_testing <- mvrnorm(n=100, b_scale_init, s_inv/lambda_scale)	
+	#mean_testing <- mvrnorm(n=100, b_mean_init, s_inv/lambda_mean_init)
+	
 	### Create output list and return
-	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior), b_init = list(mean = b_mean_init, scale = b_scale_init), lambda_init = list(mean = lambda_mean_init, scale = lambda_scale_init))
+	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior), b_init = list(mean = b_mean_init, scale = b_scale_init), lambda_init = list(mean = lambda_mean, scale = lambda_scale))
 	return(output_list)
 
 }

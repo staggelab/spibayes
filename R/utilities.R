@@ -1,0 +1,86 @@
+
+###########################################################################
+###  Extract draws from a fitdistrplus distribution
+###########################################################################
+draw_fitgamma <- function(data, n){
+	data <- data[data > 0 & !is.na(data)]
+	fitted <- fitdist(data, "gamma")
+	draws <- mvrnorm(n, mu = coef(fitted), Sigma = vcov(fitted)) 
+	draws <- draws %>%
+		as.data.frame() %>%
+		mutate(scale = 1/rate) %>%
+		mutate(mean = scale * shape) %>%
+		mutate(disp = 1/shape) %>%
+		mutate(draw = seq(1,n)) %>%
+		mutate(type = "draw")
+
+	estimate <- data.frame(shape = coef(fitted)[[1]], rate = coef(fitted)[[2]]) %>%
+		mutate(scale = 1/rate) %>%
+		mutate(mean = scale * shape) %>%
+		mutate(disp = 1/shape) %>%
+		mutate(draw = 0) %>%
+		mutate(type = "estimate")
+
+	return(bind_rows(estimate, draws))
+}
+
+###########################################################################
+###  Confidence interval on fitdisrplus gamma
+###########################################################################
+
+mle_gamma_fit <- function(jdate, values, n, ci = 0.95){
+
+	interval <- (1-ci)/2
+	interval <- c(interval, 1-interval)
+
+	data <- data.frame(jdate = jdate, values = values)
+
+	gamma_draws <- data %>%
+		group_by(jdate) %>%
+		filter(values > 0) %>%
+		group_modify(~ draw_fitgamma(.x$values, n = n)) %>%
+		ungroup()
+
+	estimate_df <- gamma_draws %>%
+		filter(type == "estimate") %>%
+		select(-draw, -type) %>%
+		pivot_longer(-jdate, names_to = "param") %>%
+		mutate(ci = "estimate")
+	
+	lower_df <- gamma_draws %>%
+		filter(type == "draw") %>%		
+		group_by(jdate) %>%
+		summarize(mean = quantile(mean, interval[1]), 
+			scale = quantile(scale, interval[1]), 
+			rate = quantile(rate, interval[1]), 
+			shape = quantile(shape, interval[1]), 			
+			disp = quantile(disp, interval[1])) %>%
+		ungroup() %>%
+		pivot_longer(-jdate, names_to = "param") %>%
+		mutate(ci = "lower_ci")
+
+	upper_df <- gamma_draws %>%
+		filter(type == "draw") %>%	
+		group_by(jdate) %>%
+		summarize(mean = quantile(mean, interval[2]), 
+			scale = quantile(scale, interval[2]), 
+			rate = quantile(rate, interval[2]), 
+			shape = quantile(shape, interval[2]), 			
+			disp = quantile(disp, interval[2])) %>%
+		ungroup() %>%
+		pivot_longer(-jdate, names_to = "param") %>%
+		mutate(ci = "upper_ci")
+
+
+	ci_df <- estimate_df%>%
+		bind_rows(lower_df) %>%
+		bind_rows(upper_df)
+
+	gamma_draws <- gamma_draws %>%
+		filter(type != "estimate")
+
+	return(list(estimate = ci_df, draws = gamma_draws))
+}
+
+
+
