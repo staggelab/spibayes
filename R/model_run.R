@@ -33,8 +33,8 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 		b_0_scale_prior=spi_input$b_0$scale,
 		b_mean_prior = spi_input$b_init$mean,
 		b_scale_prior = spi_input$b_init$scale,
-		lambda_mean_prior = c(50, 50/spi_input$lambda_init$mean),
-		lambda_scale_prior = c(50, 50/spi_input$lambda_init$scale)
+		lambda_mean_prior = c(0.5, 0.5/spi_input$lambda_init$mean),
+		lambda_scale_prior = c(0.5, 0.5/spi_input$lambda_init$scale)
 	)
 	
 	### Use the estimated lambda or 100 - whichever is smaller
