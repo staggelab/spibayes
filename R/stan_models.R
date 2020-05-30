@@ -144,7 +144,7 @@ parameters {
   real lambda_mean_first ;
   real lambda_mean_second ;
   real lambda_scale_first ;
-  real lambda_mean_second ;
+  real lambda_scale_second ;
 }
 transformed parameters { 
   matrix[basis_dim, basis_dim] K_mean; 
