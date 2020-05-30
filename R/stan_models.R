@@ -120,8 +120,8 @@ data {
   vector[2] b_0_mean_prior; 
   vector[2] b_0_scale_prior; 
 
-  vector[basis_dim] b_mean_prior; 
-  vector[basis_dim] b_scale_prior; 
+//  vector[basis_dim] b_mean_prior; 
+//  vector[basis_dim] b_scale_prior; 
 
 //  vector[4] lambda_mean_prior; 
 //  vector[4] lambda_scale_prior; 
@@ -148,18 +148,18 @@ transformed parameters {
   vector<lower=0>[N] mean_param;  
   vector<lower=0>[N] scale_param;
   
-  K_mean = S_1 * lambda_mean[1]  + S_2 * lambda_mean[2] ;
-  K_scale = S_1 * lambda_scale[1]  + S_2 * lambda_scale[2] ;
+  K_mean = S_1 * lambda_mean_first  + S_2 * lambda_mean_second ;
+  K_scale = S_1 * lambda_scale_first  + S_2 * lambda_scale_second ;
    
   mean_param = to_vector(X * b_mean) + b_0_mean;
   scale_param = to_vector(X * b_scale) + b_0_scale;
 } 
 model {
-  lambda_mean[1] ~ gamma(0.5, 0.0005);
-  lambda_mean[2] ~ normal(500000, 10000);
+  lambda_mean_first ~ gamma(0.5, 0.0005);
+  lambda_mean_second ~ normal(500000, 10000);
 
-  lambda_scale[1] ~ gamma(0.5, 0.0005);
-  lambda_scale[2] ~ normal(500000, 10000);
+  lambda_scale_first ~ gamma(0.5, 0.0005);
+  lambda_scale_second ~ normal(500000, 10000);
 	
 //  lambda_mean[1] ~ gamma(lambda_mean_prior[1], lambda_mean_prior[3]);
 // lambda_mean[2] ~ gamma(lambda_mean_prior[2], lambda_mean_prior[4]);
