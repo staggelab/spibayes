@@ -33,10 +33,18 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 		b_0_scale_prior=spi_input$b_0$scale,
 		b_mean_prior = spi_input$b_init$mean,
 		b_scale_prior = spi_input$b_init$scale,
-		lambda_mean_prior = c(0.5, 0.5/spi_input$lambda_init$mean),
-		lambda_scale_prior = c(0.5, 0.5/spi_input$lambda_init$scale)
+		lambda_mean_prior = spi_input$lambda_init$mean,
+		lambda_scale_prior = spi_input$lambda_init$scale
 	)
 	
+#	if (spi_input$type == "cyclic"){
+#		data_fitting$lambda_mean_prior <- c(0.5, data_fitting$lambda_mean_prior)
+#		data_fitting$lambda_scale_prior <- c(0.5, data_fitting$lambda_scale_prior)
+#	} else if (spi_input$type == "tensor"){
+#		data_fitting$lambda_mean_prior <- c(rep(0.5,2), data_fitting$lambda_mean_prior)
+#		data_fitting$lambda_scale_prior <- c(rep(0.5,2), data_fitting$lambda_scale_prior)
+#	}
+
 	### Use the estimated lambda or 100 - whichever is smaller
 	#lambda_mean_init <- sapply(spi_input$lambda_init$mean, function(x){min(x, 100)})
 	#lambda_scale_init <- sapply(spi_input$lambda_init$scale, function(x){min(x, 100)})
@@ -47,8 +55,8 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 		b_0_scale = spi_input$b_0$scale[1], 
 		b_mean = spi_input$b_init$mean, 
 		b_scale = spi_input$b_init$scale, 
-		lambda_mean = spi_input$lambda_init$mean, 
-		lambda_scale = spi_input$lambda_init$scale)
+		lambda_mean = c(spi_input$lambda_init$mean), 
+		lambda_scale = c(spi_input$lambda_init$scale))
 	)
 
 	### Loop through the initial values if we have more than one chain
@@ -75,7 +83,6 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 		### Insert the 3 S penaly matrices
 		data_fitting[["S_1"]] <- spi_input$s_reparam[[1]]
 		data_fitting[["S_2"]] <- spi_input$s_reparam[[2]]
-		data_fitting[["S_3"]] <- spi_input$s_reparam[[3]]
 
 		### Run model
 		model_fit <- spi_tensor(data = data_fitting, init_vals = init_vals, n_chains = n_chains, iter = iter, cores = cores)
