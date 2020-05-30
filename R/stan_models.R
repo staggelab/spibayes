@@ -138,8 +138,13 @@ parameters {
   vector[basis_dim] b_mean;  
   vector[basis_dim] b_scale;   
   
-  vector<lower=0>[2] lambda_mean ;
-  vector<lower=0>[2] lambda_scale ;
+ // vector<lower=0>[2] lambda_mean ;
+ // vector<lower=0>[2] lambda_scale ;
+
+  real lambda_mean_first ;
+  real lambda_mean_second ;
+  real lambda_scale_first ;
+  real lambda_mean_second ;
 }
 transformed parameters { 
   matrix[basis_dim, basis_dim] K_mean; 
