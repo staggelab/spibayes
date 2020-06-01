@@ -75,10 +75,10 @@ prior_cyclic <- function(data, knot_loc ){
 
 	### Calculate alpha the rescaling factor and then rescale
 	mean_alpha <- sapply(mean_model$smooth, "[[", "S.scale") / lambda_mean_init
-	lambda_mean_init <- lambda_mean_init / mean_alpha
+	lambda_mean_init <- c(lambda_mean_init / mean_alpha)
 
 	scale_alpha <- sapply(scale_model$smooth, "[[", "S.scale") / lambda_scale_init
-	lambda_scale_init <- lambda_scale_init / scale_alpha
+	lambda_scale_init <- c(lambda_scale_init / scale_alpha)
 
 	### Extract penalty matrix
 	s_matrix <- mean_model$smooth[[1]]$S[[1]]
@@ -202,10 +202,14 @@ prior_tensor <- function(data, knot_loc ){
 
 	### Calculate alpha the rescaling factor and then rescale
 	mean_alpha <- sapply(mean_model$smooth, "[[", "S.scale") / lambda_mean_init
-	lambda_mean_init <- lambda_mean_init / mean_alpha
+	lambda_mean_init <- c(lambda_mean_init / mean_alpha)
 
 	scale_alpha <- sapply(scale_model$smooth, "[[", "S.scale") / lambda_scale_init
-	lambda_scale_init <- lambda_scale_init / scale_alpha
+	lambda_scale_init <- c(lambda_scale_init / scale_alpha)
+
+	### Lambda
+	lambda_mean_prior <- c(0.05, 0.05/lambda_mean_init[1], 0.05,  0.05/lambda_mean_init[2])
+	lambda_scale_prior <- c(0.05, 0.05/lambda_scale_init[1], 0.05,  0.05/lambda_scale_init[2])
 
 	### Extract penalty matrix
 	s_matrix <- sapply(mean_model$smooth, "[[", "S")
@@ -237,7 +241,7 @@ prior_tensor <- function(data, knot_loc ){
 	lambda_scale_init[lambda_scale_init > 1E11] <- 1E11
 
 	### Create output list and return
-	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior), b_init = list(mean = b_mean_init, scale = b_scale_init), lambda_init = list(mean = lambda_mean_init, scale = lambda_scale_init))
+	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior), b_init = list(mean = b_mean_init, scale = b_scale_init), lambda_prior = list(mean = lambda_mean_prior, scale = lambda_scale_prior), lambda_init = list(mean = lambda_mean_init, scale = lambda_scale_init))
 	return(output_list)
 
 }

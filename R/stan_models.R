@@ -178,7 +178,7 @@ generated quantities {
 
 
 
-#' Tensor Product Stan model
+#' Tensor Product Stan model with fixed lambda in the year axis
 #'
 #' This is where you describe the function itself
 #' contains the rownames and the subsequent columns are the sample identifiers.
