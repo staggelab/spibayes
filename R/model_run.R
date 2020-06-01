@@ -10,7 +10,7 @@
 #' @import rstan
 #' @return A matrix of the infile
 #' @export
-spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
+spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "free"){
 	require(rstan)
 
 	### Extract important values from the input object
@@ -33,8 +33,8 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 		b_0_scale_prior=spi_input$b_0$scale,
 		b_mean_prior = spi_input$b_init$mean,
 		b_scale_prior = spi_input$b_init$scale,
-		lambda_mean_prior = spi_input$lambda_init$mean,
-		lambda_scale_prior = spi_input$lambda_init$scale
+		lambda_mean_prior = spi_input$lambda_prior$mean,
+		lambda_scale_prior = spi_input$lambda_prior$scale
 	)
 	
 #	if (spi_input$type == "cyclic"){
@@ -55,9 +55,14 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 		b_0_scale = spi_input$b_0$scale[1], 
 		b_mean = spi_input$b_init$mean, 
 		b_scale = spi_input$b_init$scale, 
-		lambda_mean = c(spi_input$lambda_init$mean), 
-		lambda_scale = c(spi_input$lambda_init$scale))
+		lambda_mean_first = spi_input$lambda_init$mean[1], 
+		lambda_scale_first = spi_input$lambda_init$scale[1])
 	)
+
+	if (spi_input$type == "tensor" & lambda_year == "free"){
+		init_vals[[1]]$lambda_mean_second <- spi_input$lambda_init$mean[2]
+		init_vals[[1]]$lambda_scale_second <- spi_input$lambda_init$scale[2]
+	}
 
 	### Loop through the initial values if we have more than one chain
 	### Vary lambda values 2 orders of magnitude smaller or larger
@@ -85,8 +90,7 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1){
 		data_fitting[["S_2"]] <- spi_input$s_reparam[[2]]
 
 		### Run model
-		model_fit <- spi_tensor(data = data_fitting, init_vals = init_vals, n_chains = n_chains, iter = iter, cores = cores)
-
+		model_fit <- spi_tensor(data = data_fitting, init_vals = init_vals, n_chains = n_chains, iter = iter, cores = cores, lambda_year = lambda_year)
 	}
 
 	return(model_fit)
@@ -129,8 +133,9 @@ spi_cyclic <- function(data, init_vals, n_chains, iter, cores){
 #' @param knot_loc List of knot locations
 #' @return A matrix of the infile
 #' @export
-spi_tensor <- function(data, init_vals, n_chains, iter, cores){
+spi_tensor <- function(data, init_vals, n_chains, iter, cores,  lambda_year){
 
+	if(lambda_year == "free"){
 	### Fit the model
 	model_fit <- rstan::stan(model_code = tensor_model, 
 		data = data, 
@@ -139,6 +144,15 @@ spi_tensor <- function(data, init_vals, n_chains, iter, cores){
 		chains = n_chains,
 		cores = cores, 
 		verbose = FALSE)
+	} else if (lambda_year == "fixed"){
+	model_fit <- rstan::stan(model_code = tensor_model_lambdafixed, 
+		data = data, 
+		init = init_vals,
+		iter = iter, 
+		chains = n_chains,
+		cores = cores, 
+		verbose = FALSE)
+	}
 
 	return(model_fit)
 }
