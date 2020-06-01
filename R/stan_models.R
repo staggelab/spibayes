@@ -125,7 +125,7 @@ data {
  }
 transformed data {  
  vector[basis_dim] zero; 
- vector[N] zero;
+ vector[N] ones;
 
  zero = rep_vector(0, basis_dim) ;
 
@@ -211,7 +211,7 @@ data {
  }
 transformed data {  
  vector[basis_dim] zero; 
- vector[N] zero;
+ vector[N] ones;
 
  zero = rep_vector(0, basis_dim) ;
 
