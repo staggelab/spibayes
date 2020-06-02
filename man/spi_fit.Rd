@@ -4,7 +4,7 @@
 \alias{spi_fit}
 \title{Run cyclic model}
 \usage{
-spi_fit(spi_input, n_chains = 1, iter = 1000, cores = 1)
+spi_fit(spi_input, n_chains = 1, iter = 1000, cores = 1, lambda_year = "free")
 }
 \arguments{
 \item{data}{Dataframe with the underlying data. Columns must include variable names}
