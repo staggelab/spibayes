@@ -114,8 +114,8 @@ data {
   int<lower=0> basis_dim;
   
   matrix[N,basis_dim] X; 
-  matrix[basis_dim,basis_dim] S_1; 
-  matrix[basis_dim,basis_dim] S_2; 
+  cov_matrix[basis_dim] S_1; 
+  cov_matrix[basis_dim] S_2; 
   
   vector[2] b_0_mean_prior; 
   vector[2] b_0_scale_prior; 
@@ -158,10 +158,10 @@ transformed parameters {
 } 
 model {
     lambda_mean_first ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
-    lambda_mean_second ~ uniform(lambda_mean_prior[3], lambda_mean_prior[4]);
+    lambda_mean_second ~ gamma(lambda_mean_prior[3], lambda_mean_prior[4]);
 
     lambda_scale_first ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
-    lambda_scale_second ~ uniform(lambda_scale_prior[3], lambda_scale_prior[4]);
+    lambda_scale_second ~ gamma(lambda_scale_prior[3], lambda_scale_prior[4]);
 	
     b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
     b_mean ~ multi_normal_prec(zero,K_mean);   
@@ -199,8 +199,8 @@ data {
   int<lower=0> basis_dim;
   
   matrix[N,basis_dim] X; 
-  matrix[basis_dim,basis_dim] S_1; 
-  matrix[basis_dim,basis_dim] S_2; 
+  cov_matrix[basis_dim] S_1; 
+  cov_matrix[basis_dim] S_2; 
   
   vector[2] b_0_mean_prior; 
   vector[2] b_0_scale_prior; 
@@ -235,15 +235,18 @@ transformed parameters {
   vector<lower=0>[N] scale_param;
   
   K_mean = S_1 * lambda_mean_first  + S_2 * lambda_mean_prior[3] ;
-  K_scale = S_1 * lambda_scale_first  + S_2 * lambda_mean_prior[3] ;
+  K_scale = S_1 * lambda_scale_first  + S_2 * lambda_scale_prior[3] ;
    
   mean_param = to_vector(X * b_mean) + b_0_mean;
   scale_param = to_vector(X * b_scale) + b_0_scale;
 } 
 model {
-  lambda_mean_first ~  gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
-  lambda_scale_first ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
+  lambda_mean_first ~  uniform(lambda_mean_prior[1], lambda_mean_prior[2]);
+  lambda_scale_first ~ uniform(lambda_scale_prior[1], lambda_scale_prior[2]);
 	
+   //lambda_mean_first ~  gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
+   //lambda_scale_first ~  gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
+
    b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
    b_mean ~ multi_normal_prec(zero,K_mean);   
 
@@ -257,6 +260,7 @@ model {
 generated quantities {
 }
 '
+
 
 
 

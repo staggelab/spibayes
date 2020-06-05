@@ -31,12 +31,15 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 		X = X,  
 		b_0_mean_prior=spi_input$b_0$mean, 
 		b_0_scale_prior=spi_input$b_0$scale,
-		b_mean_prior = spi_input$b_init$mean,
-		b_scale_prior = spi_input$b_init$scale,
 		lambda_mean_prior = spi_input$lambda_prior$mean,
 		lambda_scale_prior = spi_input$lambda_prior$scale
 	)
 	
+	if (spi_input$type == "cyclic"){
+		data_fitting$b_mean_prior = spi_input$b_init$mean,
+		data_fitting$b_scale_prior = spi_input$b_init$scale,
+	}
+
 #	if (spi_input$type == "cyclic"){
 #		data_fitting$lambda_mean_prior <- c(0.5, data_fitting$lambda_mean_prior)
 #		data_fitting$lambda_scale_prior <- c(0.5, data_fitting$lambda_scale_prior)
@@ -44,10 +47,6 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 #		data_fitting$lambda_mean_prior <- c(rep(0.5,2), data_fitting$lambda_mean_prior)
 #		data_fitting$lambda_scale_prior <- c(rep(0.5,2), data_fitting$lambda_scale_prior)
 #	}
-
-	### Use the estimated lambda or 100 - whichever is smaller
-	#lambda_mean_init <- sapply(spi_input$lambda_init$mean, function(x){min(x, 100)})
-	#lambda_scale_init <- sapply(spi_input$lambda_init$scale, function(x){min(x, 100)})
 
 	### Create the initial values
 	init_vals <- list(list(
@@ -78,16 +77,17 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 	if (spi_input$type == "cyclic"){
 
 		### Insert the S penaly matrix, which is different shape for cyclic than tensor
-		data_fitting[["S"]] <- spi_input$s_reparam
+		data_fitting[["S"]] <- as.matrix(Matrix::nearPD(spi_input$s_reparam)$mat)
 
 		### Run model
 		model_fit <- spi_cyclic(data = data_fitting, init_vals = init_vals, n_chains = n_chains, iter = iter, cores = cores)
 
 	} else if (spi_input$type == "tensor"){
 		
-		### Insert the 3 S penaly matrices
-		data_fitting[["S_1"]] <- spi_input$s_reparam[[1]]
-		data_fitting[["S_2"]] <- spi_input$s_reparam[[2]]
+		### Insert the 2 S penaly matrices
+		### Use the nearPD command to make sure they are positive definite
+		data_fitting[["S_1"]] <- as.matrix(Matrix::nearPD(spi_input$s_reparam[[1]])$mat)
+		data_fitting[["S_2"]] <- as.matrix(Matrix::nearPD(spi_input$s_reparam[[2]])$mat)
 
 		### Run model
 		model_fit <- spi_tensor(data = data_fitting, init_vals = init_vals, n_chains = n_chains, iter = iter, cores = cores, lambda_year = lambda_year)

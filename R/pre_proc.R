@@ -236,13 +236,92 @@ prior_tensor <- function(data, knot_loc ){
 	#lines(mean_samples[4,7:13], col="blue")
 	#lines(mean_samples[5,7:13], col="blue")
 
-	### Catch for excessively high values
-	lambda_scale_init[lambda_scale_init > 1E11] <- 1E11
-	lambda_scale_init[lambda_scale_init > 1E11] <- 1E11
-
 	### Create output list and return
 	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior), b_init = list(mean = b_mean_init, scale = b_scale_init), lambda_prior = list(mean = lambda_mean_prior, scale = lambda_scale_prior), lambda_init = list(mean = lambda_mean_init, scale = lambda_scale_init))
 	return(output_list)
 
 }
+
+
+
+
+
+
+#' Magic Lambda
+#'
+#' This is where you describe the function itself
+#' contains the rownames and the subsequent columns are the sample identifiers.
+#' Any rows with duplicated row names will be dropped with the first one being
+#'
+#' @param data Dataframe with the underlying data. Columns must include variable names
+#' @param spline_type List of spline types. Either cc or cr are accepted. Names must agree with knot_loc
+#' @param knot_loc List of knot locations
+#' @return A matrix of the infile
+#' @export
+magic_lambda <- function(pre_model, lambda_year = -1, lambda_ratio = 200){
+
+	if(lambda_year == -1 & lambda_ratio == -1){
+		lambda_year <- 5000
+	}
+
+	### Extract the penalty matrix for the first parameter
+	s_1 <- pre_model$s_reparam[[1]]
+	s_2 <- pre_model$s_reparam[[2]]
+
+	match_extremes <- function(lambda_jdate, lambda_year, target){
+		penalty <- lambda_jdate * s_1 + (lambda_year) * s_2
+		random_draw <- mvrnorm(n=1000, rep(0,length(mean_beta)), ginv(penalty))
+		row_max <- apply(random_draw, 1, function(x){max(abs(x))})
+		return(abs(target - median(row_max)))
+	}
+
+	match_extremes_ratio <- function(lambda_jdate, lambda_ratio, target){
+		penalty <- lambda_jdate * s_1 + (lambda_jdate * lambda_ratio) * s_2
+		random_draw <- mvrnorm(n=1000, rep(0,length(mean_beta)), ginv(penalty))
+		row_max <- apply(random_draw, 1, function(x){max(abs(x))})
+		return(abs(target - median(row_max)))
+	}
+
+	mean_beta <- preproc_model$b_init$mean
+	scale_beta <- preproc_model$b_init$scale
+
+	if(lambda_year == -1 & lambda_ratio > 0){
+	lambda_lower <- optimize(match_extremes_ratio, interval = c(1E-2,1E6), lambda_ratio = lambda_ratio, target = 0.8*max(abs(mean_beta)))
+	lambda_lower <- lambda_lower$minimum
+
+	lambda_upper <- optimize(match_extremes_ratio, interval = c(1E-2,1E6), lambda_ratio = lambda_ratio, target = 0.3*max(abs(mean_beta)))
+	lambda_upper <- lambda_upper$minimum
+
+	lambda_mean_prior <- c(lambda_lower, lambda_upper, lambda_lower* lambda_ratio, lambda_upper * lambda_ratio)
+
+	lambda_lower <- optimize(match_extremes_ratio, interval = c(1E-2,1E6), lambda_ratio = lambda_ratio, target = 0.8*max(abs(scale_beta)))
+	lambda_lower <- lambda_lower$minimum
+
+	lambda_upper <- optimize(match_extremes_ratio, interval = c(1E-2,1E6), lambda_ratio = lambda_ratio, target = 0.3*max(abs(scale_beta)))
+	lambda_upper <- lambda_upper$minimum
+
+	lambda_scale_prior <- c(lambda_lower, lambda_upper, lambda_lower* lambda_ratio, lambda_upper * lambda_ratio)
+	} else {
+	lambda_lower <- optimize(match_extremes, interval = c(1E-2,1E6), lambda_year = lambda_year, target = 0.8*max(abs(mean_beta)))
+	lambda_lower <- lambda_lower$minimum
+
+	lambda_upper <- optimize(match_extremes, interval = c(1E-2,1E6), lambda_year = lambda_year, target = 0.3*max(abs(mean_beta)))
+	lambda_upper <- lambda_upper$minimum
+
+	lambda_mean_prior <- c(lambda_lower, lambda_upper, lambda_year)
+
+	lambda_lower <- optimize(match_extremes, interval = c(1E-2,1E6), lambda_year = lambda_year, target = 0.8*max(abs(scale_beta)))
+	lambda_lower <- lambda_lower$minimum
+
+	lambda_upper <- optimize(match_extremes, interval = c(1E-2,1E6), lambda_year = lambda_year, target = 0.3*max(abs(scale_beta)))
+	lambda_upper <- lambda_upper$minimum
+
+	lambda_scale_prior <- c(lambda_lower, lambda_upper, lambda_year)
+	}
+
+
+	return(list(mean = lambda_mean_prior, scale = lambda_scale_prior))
+}
+
+
 
