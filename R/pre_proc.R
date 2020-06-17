@@ -282,8 +282,8 @@ magic_lambda <- function(pre_model, lambda_year = -1, lambda_ratio = 200){
 		return(abs(target - median(row_max)))
 	}
 
-	mean_beta <- preproc_model$b_init$mean
-	scale_beta <- preproc_model$b_init$scale
+	mean_beta <- pre_model$b_init$mean
+	scale_beta <- pre_model$b_init$scale
 
 	if(lambda_year == -1 & lambda_ratio > 0){
 	lambda_lower <- optimize(match_extremes_ratio, interval = c(1E-2,1E6), lambda_ratio = lambda_ratio, target = 0.8*max(abs(mean_beta)))
