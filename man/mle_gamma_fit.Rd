@@ -4,7 +4,7 @@
 \alias{mle_gamma_fit}
 \title{Confidence interval on fitdisrplus gamma}
 \usage{
-mle_gamma_fit(jdate, values, n, ci = 0.95)
+mle_gamma_fit(jdate, values, n, ci = 0.95, method = "boot")
 }
 \arguments{
 \item{data}{Dataframe with the underlying data. Columns must include variable names}
