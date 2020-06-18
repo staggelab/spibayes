@@ -83,7 +83,7 @@ theta_est <- function(data){
 	### Calculate using k/n+1 plotting position. This is equivalent to the quantile Type 6. This is used by Minitab and by SPSS. pk = E(F(x)) probability is the mean/expectation of the cumulative density function
 	theta_emp <- sum(data == 0, na.rm=TRUE)/(sum(!is.na(data)) + 1)
 
-	return(theta_emp)
+	return(data.frame(theta = theta_emp))
 }
 
 
@@ -129,6 +129,19 @@ mle_gamma_fit <- function(jdate, values, n, ci = 0.95, method = "param"){
 		select(-draw, -type) %>%
 		pivot_longer(-jdate, names_to = "param") %>%
 		mutate(ci = "estimate")
+
+	### Perform analysis on the zero precipitation likelihood
+	theta_df <- data %>%
+		group_by(jdate) %>% 
+		group_modify(~ theta_est(.x$values)) %>%
+		pivot_longer(-jdate, names_to = "param") %>%
+		ungroup() %>%
+		mutate(ci = "estimate")
+
+	### Combine theta with estimate
+	estimate_df <- estimate_df %>% 
+		bind_rows(theta_df) %>% 
+		arrange(jdate, param)
 	
 	lower_df <- gamma_draws %>%
 		filter(type == "draw") %>%		
@@ -154,16 +167,12 @@ mle_gamma_fit <- function(jdate, values, n, ci = 0.95, method = "param"){
 		pivot_longer(-jdate, names_to = "param") %>%
 		mutate(ci = "upper_ci")
 
-
 	ci_df <- estimate_df%>%
 		bind_rows(lower_df) %>%
 		bind_rows(upper_df)
 
 	gamma_draws <- gamma_draws %>%
 		filter(type != "estimate")
-
-	### Perform analysis on the zero precipitation likelihood
-	
 
 	return(list(estimate = ci_df, draws = gamma_draws))
 }
