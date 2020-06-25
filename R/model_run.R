@@ -38,6 +38,9 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 	if (spi_input$type == "cyclic"){
 		data_fitting$b_mean_prior = spi_input$b_init$mean
 		data_fitting$b_scale_prior = spi_input$b_init$scale
+
+		data_fitting$lambda_mean_prior <- c(5, 5/spi_input$lambda_init$mean)
+ 		data_fitting$lambda_scale_prior <- c(5, 5/spi_input$lambda_init$scale)
 	}
 
 #	if (spi_input$type == "cyclic"){
