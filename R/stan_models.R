@@ -29,8 +29,6 @@ data {
   vector[2] lambda_scale_prior; 
  }
 transformed data {  
- // vector[basis_dim] zero; 
- // zero = rep_vector(0, basis_dim) ;
 }
 parameters {
   real b_0_mean;
@@ -41,6 +39,8 @@ parameters {
   
   real<lower=0> lambda_mean ;
   real<lower=0> lambda_scale ;
+
+  real<lower=0, upper=1> theta;
 }
 transformed parameters { 
   matrix[basis_dim, basis_dim] K_mean; 
@@ -56,11 +56,9 @@ transformed parameters {
   scale_param = to_vector(X * b_scale) + b_0_scale;
 } 
 model {
- 
+  theta ~ beta(1,1);
   lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
   lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
-  //lambda_mean ~ gamma(0.05,0.005);
-  //lambda_scale ~ gamma(0.05,0.005);
 	
    b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
    b_mean ~ multi_normal_prec(b_mean_prior,K_mean); 
@@ -69,25 +67,18 @@ model {
    b_scale ~ multi_normal_prec(b_scale_prior,K_scale); 
   
   // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter
-  y ~ gamma(mean_param ./ scale_param, rep_vector(1, N) ./ scale_param);  // shape is mean over scale, rate is 1 over scale
+ // y ~ gamma(mean_param ./ scale_param, rep_vector(1, N) ./ scale_param);  // shape is mean over scale, rate is 1 over scale
+
+  for(n in 1:N){
+   if (y[n] == 0)
+	  target += bernoulli_lpmf(1 | theta);
+    else {
+	  target += bernoulli_lpmf(0 | theta) + gamma_lpdf(y[n] | mean_param[n] / scale_param[n], inv(scale_param[n]));
+    }	
+  }  
  
 }
 generated quantities {
- // vector[N] mean_est;
- // vector[N] scale_est;
- // vector[N] shape_est;   
- // vector[N] rate_est;  
- // real rho_mean;
- // real rho_scale;
-  
- // mean_est = exp(mean_param);
- // scale_est = exp(scale_param);
-  
- // shape_est = mean_param ./ exp(scale_param);
- // rate_est = rep_vector(1, N) ./ exp(scale_param);
-  
- // rho_mean = log(lambda_mean);
- // rho_scale = log(lambda_scale);
 }
 '
 
