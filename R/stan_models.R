@@ -30,7 +30,7 @@ data {
  }
 transformed data {  
   vector[basis_dim] b_theta_prior; 
-  b_theta_prior = rep_vector(0.5, basis_dim);
+  b_theta_prior = rep_vector(0.1, basis_dim);
 }
 parameters {
   real b_0_mean;
@@ -52,7 +52,8 @@ transformed parameters {
  
   vector<lower=0>[N] mean_param;  
   vector<lower=0>[N] scale_param;
-  vector[N] theta_param;
+  vector[N] theta_log;
+  vector<lower=0, upper =1>[N] theta_param;
  
   K_mean = S * lambda_mean ;
   K_scale = S * lambda_scale ;
@@ -60,12 +61,13 @@ transformed parameters {
   
   mean_param = to_vector(X * b_mean) + b_0_mean;
   scale_param = to_vector(X * b_scale) + b_0_scale;
-  theta_param = to_vector(X * b_theta) + b_0_theta;
+  theta_log = to_vector(X * b_theta) + b_0_theta;
+  theta_param = exp(theta_log)/(exp(theta_log) +1);
 } 
 model {
   lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
   lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
-  lambda_theta ~ gamma(5, 0.1);
+  lambda_theta ~ gamma(1, 0.001);
 	
    b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
    b_mean ~ multi_normal_prec(b_mean_prior,K_mean); 
@@ -73,7 +75,7 @@ model {
    b_0_scale  ~ normal(b_0_scale_prior[1],b_0_scale_prior[2]);  
    b_scale ~ multi_normal_prec(b_scale_prior,K_scale); 
 
-   b_0_theta ~ normal(-1,2);   
+   b_0_theta ~ normal(-3,0.01);   
    b_theta ~ multi_normal_prec(b_theta_prior, K_theta); 
   
   // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter
@@ -81,10 +83,10 @@ model {
 
   for(n in 1:N){
    if (y[n] == 0)
-      1 ~ bernoulli_logit(theta_param[n]);
+      1 ~ bernoulli(theta_param[n]);
     else {
-      0 ~ bernoulli_logit(theta_param[n]);
-      y[n] ~ gamma(mean_param[n] / scale_param[n], 1/scale_param[n] );
+      0 ~ bernoulli(theta_param[n]);
+      y[n] ~ gamma(mean_param[n] / scale_param[n], inv(scale_param[n]) );
     }	
   }  
  
