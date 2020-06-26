@@ -62,7 +62,7 @@ transformed parameters {
   mean_param = to_vector(X * b_mean) + b_0_mean;
   scale_param = to_vector(X * b_scale) + b_0_scale;
   theta_log = to_vector(X * b_theta) + b_0_theta;
-  theta_param = exp(theta_log)/(exp(theta_log) +1);
+  theta_param = exp(theta_log)./(exp(theta_log) + rep_vector(1, N));
 } 
 model {
   lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
