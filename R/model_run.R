@@ -58,9 +58,8 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 		b_mean = spi_input$b_init$mean, 
 		b_scale = spi_input$b_init$scale, 
 		lambda_mean_first = spi_input$lambda_init$mean[1], 
-		lambda_scale_first = spi_input$lambda_init$scale[1], 
-		theta = spi_input$theta[1])
-	)
+		lambda_scale_first = spi_input$lambda_init$scale[1]
+	))
 
 	if (spi_input$type == "tensor" & lambda_year == "free"){
 		init_vals[[1]]$lambda_mean_second <- spi_input$lambda_init$mean[2]

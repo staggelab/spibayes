@@ -65,7 +65,7 @@ transformed parameters {
 model {
   lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
   lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
-  lambda_theta ~ gamma(5, 5/50);
+  lambda_theta ~ gamma(5, 0.1);
 	
    b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
    b_mean ~ multi_normal_prec(b_mean_prior,K_mean); 
