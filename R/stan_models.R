@@ -30,7 +30,7 @@ data {
  }
 transformed data {  
   vector[basis_dim] b_theta_prior; 
-  b_theta_prior = 0;	
+  b_theta_prior = rep_vector(0, basis_dim);
 }
 parameters {
   real b_0_mean;
