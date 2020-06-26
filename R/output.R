@@ -30,6 +30,9 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 	### Combine the intercept and spline coefficients into a single matrix
 	b_full_scale <- cbind(matrix(b_0_scale, dim(b_scale_orig)[1], 1), b_scale_orig)
 
+	### Extract theta
+	theta <- extract(model_fit, "theta")$theta
+
 	### If new data isn't provided, assume it is the data used to fit the model
 	if(is.null(newdata)){
 		x_orig <- cbind(1, basis$x_orig)
@@ -53,15 +56,28 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 	b_mean_est <- x_orig %*% t(b_full_mean)
 	b_scale_est <- x_orig %*% t(b_full_scale)
 
+	theta_est <- t(theta)
+	theta_est <- theta_est[rep(1:nrow(theta_est), times = dim(b_mean_est)[1]),]
+
+	if (type == "cyclic"){
+		mean_est <- data.frame(select(newdata, "jdate", "year"), b_mean_est) %>%
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="mean") 
+		scale_est <- data.frame(select(newdata, "jdate", "year"), b_scale_est)  %>%
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="scale") 
+		theta_est <- data.frame(select(newdata, "jdate", "year"), theta_est) %>%
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="theta") 
+	} else {
 	### Gather the results into a long dataframe
-	mean_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_mean_est) %>%
-		#select("jdate", "year", "mean") %>%
-		pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="mean") 
-	scale_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_scale_est)  %>%
-		pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="scale") 
+		mean_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_mean_est) %>%
+			#select("jdate", "year", "mean") %>%
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="mean") 
+		scale_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_scale_est)  %>%
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="scale") 
+	}
 
 	### Add in the derived parameters
 	param_est <- full_join(mean_est, scale_est) %>%
+		full_join(theta_est) %>%
 		mutate(rate = 1/scale) %>%
 		mutate(shape = mean * rate) %>%
 		mutate(disp = 1/shape) 
