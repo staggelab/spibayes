@@ -29,51 +29,62 @@ data {
   vector[2] lambda_scale_prior; 
  }
 transformed data {  
+  vector[basis_dim] b_theta_prior; 
+  b_theta_prior = 0;	
 }
 parameters {
   real b_0_mean;
   real b_0_scale;  
-  
+   real b_0_theta;  
+ 
   vector[basis_dim] b_mean;  
   vector[basis_dim] b_scale;   
-  
+  vector[basis_dim] b_theta; 
+ 
   real<lower=0> lambda_mean ;
   real<lower=0> lambda_scale ;
-
-  real<lower=0, upper=1> theta;
+  real<lower=0> lambda_theta ;
 }
 transformed parameters { 
   matrix[basis_dim, basis_dim] K_mean; 
   matrix[basis_dim, basis_dim] K_scale; 
-  
+  matrix[basis_dim, basis_dim] K_theta; 
+ 
   vector<lower=0>[N] mean_param;  
   vector<lower=0>[N] scale_param;
-  
+  vector[N] theta_param;
+ 
   K_mean = S * lambda_mean ;
   K_scale = S * lambda_scale ;
-   
+  K_theta = S * lambda_theta ;
+  
   mean_param = to_vector(X * b_mean) + b_0_mean;
   scale_param = to_vector(X * b_scale) + b_0_scale;
+  theta_param = to_vector(X * b_theta) + b_0_theta;
 } 
 model {
-  theta ~ beta(1,1);
   lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
   lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
+  lambda_theta ~ gamma(5, 5/50);
 	
    b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
    b_mean ~ multi_normal_prec(b_mean_prior,K_mean); 
  
    b_0_scale  ~ normal(b_0_scale_prior[1],b_0_scale_prior[2]);  
    b_scale ~ multi_normal_prec(b_scale_prior,K_scale); 
+
+   b_0_theta ~ normal(-1,2);   
+   b_theta ~ multi_normal_prec(b_theta_prior, K_theta); 
   
   // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter
  // y ~ gamma(mean_param ./ scale_param, rep_vector(1, N) ./ scale_param);  // shape is mean over scale, rate is 1 over scale
 
   for(n in 1:N){
    if (y[n] == 0)
-	  target += bernoulli_lpmf(1 | theta);
+      1 ~ bernoulli_logit(theta_param[n]);
     else {
-	  target += bernoulli_lpmf(0 | theta) + gamma_lpdf(y[n] | mean_param[n] / scale_param[n], inv(scale_param[n]));
+      0 ~ bernoulli_logit(theta_param[n]);
+      y[n] ~ gamma(mean_param[n] / scale_param[n], inv(scale_param[n]);
     }	
   }  
  
