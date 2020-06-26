@@ -84,7 +84,7 @@ model {
       1 ~ bernoulli_logit(theta_param[n]);
     else {
       0 ~ bernoulli_logit(theta_param[n]);
-      y[n] ~ gamma(mean_param[n] / scale_param[n], inv(scale_param[n]);
+      y[n] ~ gamma(mean_param[n] / scale_param[n], 1/scale_param[n] );
     }	
   }  
  
