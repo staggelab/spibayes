@@ -84,7 +84,7 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 		mutate(rate = 1/scale) %>%
 		mutate(shape = mean * rate) %>%
 		mutate(disp = 1/shape) %>%
-		mutate(theta = exp(theta_logodds)/(1+exp(theta_logodds))
+		mutate(theta = exp(theta_logodds)/(1+exp(theta_logodds)))
 
 	return(list(param_est = param_est, b_mean = b_full_mean, b_scale = b_full_scale,  b_theta = b_full_theta))
 }
