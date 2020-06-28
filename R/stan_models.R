@@ -29,6 +29,7 @@ data {
 
   vector[2] lambda_mean_prior; 
   vector[2] lambda_scale_prior; 
+  vector[2] lambda_theta_prior; 
  }
 transformed data {  
 }
