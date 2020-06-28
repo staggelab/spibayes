@@ -31,7 +31,12 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 	b_full_scale <- cbind(matrix(b_0_scale, dim(b_scale_orig)[1], 1), b_scale_orig)
 
 	### Extract theta
-	theta <- extract(model_fit, "theta")$theta
+	b_theta <- extract(model_fit, "b_theta")$b_theta
+	b_0_theta <- extract(model_fit, "b_0_theta")$b_0_theta
+	### Convert to original basis
+	b_theta_orig <- t(apply(b_theta, 1, function(x){basis$z %*% x}))
+	### Combine the intercept and spline coefficients into a single matrix
+	b_full_theta <- cbind(matrix(b_0_theta, dim(b_theta_orig)[1], 1), b_theta_orig)
 
 	### If new data isn't provided, assume it is the data used to fit the model
 	if(is.null(newdata)){
@@ -55,9 +60,7 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 	### Calculate the estimate of mean and scale for the demo basis
 	b_mean_est <- x_orig %*% t(b_full_mean)
 	b_scale_est <- x_orig %*% t(b_full_scale)
-
-	theta_est <- t(theta)
-	theta_est <- theta_est[rep(1:nrow(theta_est), times = dim(b_mean_est)[1]),]
+	b_scale_est <- x_orig %*% t(b_theta_scale)
 
 	if (type == "cyclic"){
 		mean_est <- data.frame(select(newdata, "jdate", "year"), b_mean_est) %>%
@@ -65,7 +68,7 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 		scale_est <- data.frame(select(newdata, "jdate", "year"), b_scale_est)  %>%
 			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="scale") 
 		theta_est <- data.frame(select(newdata, "jdate", "year"), theta_est) %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="theta") 
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="theta_logodds") 
 	} else {
 	### Gather the results into a long dataframe
 		mean_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_mean_est) %>%
@@ -80,9 +83,10 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 		full_join(theta_est) %>%
 		mutate(rate = 1/scale) %>%
 		mutate(shape = mean * rate) %>%
-		mutate(disp = 1/shape) 
+		mutate(disp = 1/shape) %>%
+		mutate(theta = exp(theta_logodds)/(1+exp(theta_logodds))
 
-	return(list(param_est = param_est, b_mean = b_full_mean, b_scale = b_full_scale))
+	return(list(param_est = param_est, b_mean = b_full_mean, b_scale = b_full_scale,  b_theta = b_full_theta))
 }
 
 

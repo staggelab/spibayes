@@ -31,16 +31,20 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 		X = X,  
 		b_0_mean_prior=spi_input$b_0$mean, 
 		b_0_scale_prior=spi_input$b_0$scale,
+		b_0_theta_prior=spi_input$b_0$theta,
 		lambda_mean_prior = spi_input$lambda_prior$mean,
-		lambda_scale_prior = spi_input$lambda_prior$scale
+		lambda_scale_prior = spi_input$lambda_prior$scale, 
+		lambda_theta_prior = spi_input$lambda_prior$theta
 	)
 	
 	if (spi_input$type == "cyclic"){
 		data_fitting$b_mean_prior = spi_input$b_init$mean
 		data_fitting$b_scale_prior = spi_input$b_init$scale
+		data_fitting$b_theta_prior = spi_input$b_init$theta
 
 		data_fitting$lambda_mean_prior <- c(5, 5/spi_input$lambda_init$mean)
  		data_fitting$lambda_scale_prior <- c(5, 5/spi_input$lambda_init$scale)
+ 		data_fitting$lambda_theta_prior <- c(5, 5/spi_input$lambda_init$theta)
 	}
 
 #	if (spi_input$type == "cyclic"){
@@ -55,8 +59,10 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 	init_vals <- list(list(
 		b_0_mean = spi_input$b_0$mean[1], 
 		b_0_scale = spi_input$b_0$scale[1], 
+		b_0_theta = spi_input$b_0$theta[1], 
 		b_mean = spi_input$b_init$mean, 
 		b_scale = spi_input$b_init$scale, 
+		b_theta = spi_input$b_init$theta, 
 		lambda_mean_first = spi_input$lambda_init$mean[1], 
 		lambda_scale_first = spi_input$lambda_init$scale[1]
 	))

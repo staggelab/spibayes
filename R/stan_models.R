@@ -21,21 +21,21 @@ data {
     
   vector[2] b_0_mean_prior; 
   vector[2] b_0_scale_prior; 
-  
+  vector[2] b_0_theta_prior; 
+
   vector[basis_dim] b_mean_prior; 
   vector[basis_dim] b_scale_prior; 
+  vector[basis_dim] b_theta_prior; 
 
   vector[2] lambda_mean_prior; 
   vector[2] lambda_scale_prior; 
  }
 transformed data {  
-  vector[basis_dim] b_theta_prior; 
-  b_theta_prior = rep_vector(0.1, basis_dim);
 }
 parameters {
   real b_0_mean;
   real b_0_scale;  
-   real b_0_theta;  
+  real b_0_theta;  
  
   vector[basis_dim] b_mean;  
   vector[basis_dim] b_scale;   
@@ -67,7 +67,7 @@ transformed parameters {
 model {
   lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
   lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
-  lambda_theta ~ gamma(1, 0.001);
+  lambda_theta ~ gamma(lambda_theta_prior[1], lambda_theta_prior[2]);
 	
    b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
    b_mean ~ multi_normal_prec(b_mean_prior,K_mean); 
@@ -75,7 +75,7 @@ model {
    b_0_scale  ~ normal(b_0_scale_prior[1],b_0_scale_prior[2]);  
    b_scale ~ multi_normal_prec(b_scale_prior,K_scale); 
 
-   b_0_theta ~ normal(-3,0.01);   
+   b_0_theta ~ normal(b_0_theta_prior[1],b_0_theta_prior[2]);   
    b_theta ~ multi_normal_prec(b_theta_prior, K_theta); 
   
   // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter

@@ -60,18 +60,22 @@ prior_cyclic <- function(data, knot_loc ){
 	### Fit a cyclic spline model using mgcv
 	mean_model <- mgcv::gam(mean ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
 	scale_model <- mgcv::gam(scale ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
-	
+	theta_model <- mgcv::gam(zero ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE,family=binomial)
+
 	### Create the prior for the mean intercept
 	b_0_mean_prior <- c(summary(mean_model)$p.table[1], summary(mean_model)$p.table[2])
 	b_0_scale_prior <- c(summary(scale_model)$p.table[1], summary(scale_model)$p.table[2])
+	b_0_theta_prior <- c(summary(theta_model)$p.table[1], summary(theta_model)$p.table[2])
 
 	### Create a vector for intializing the mean
 	b_mean_init <- c(coef(mean_model)[2:length(coef(mean_model))])
 	b_scale_init <- c(coef(scale_model)[2:length(coef(scale_model))])
+	b_theta_init <- c(coef(theta_model)[2:length(coef(theta_model))])
 
 	### Extract smoothing penalty
 	lambda_mean_init <- unname(c(mean_model$sp ))
 	lambda_scale_init <- unname(c(scale_model$sp))
+	lambda_theta_init <- unname(c(theta_model$sp))
 
 	### Calculate alpha the rescaling factor and then rescale
 	mean_alpha <- sapply(mean_model$smooth, "[[", "S.scale") / lambda_mean_init
@@ -79,6 +83,9 @@ prior_cyclic <- function(data, knot_loc ){
 
 	scale_alpha <- sapply(scale_model$smooth, "[[", "S.scale") / lambda_scale_init
 	lambda_scale_init <- c(lambda_scale_init / scale_alpha)
+
+	theta_alpha <- sapply(theta_model$smooth, "[[", "S.scale") / lambda_theta_init
+	lambda_theta_init <- c(lambda_theta_init / theta_alpha)
 
 	### Extract penalty matrix
 	s_matrix <- mean_model$smooth[[1]]$S[[1]]
@@ -88,16 +95,18 @@ prior_cyclic <- function(data, knot_loc ){
 	### Might not need to do this
 	mean_samples <- mvrnorm(n=100, b_mean_init, s_inv)
 	scale_samples <- mvrnorm(n=100, b_scale_init, s_inv)
+	theta_samples <- mvrnorm(n=100, b_theta_init, s_inv)
 
 	lambda_mean <- 1/((sd(b_mean_init)/mean(apply(mean_samples, 1, sd)))^2)
 	lambda_scale <- 1/((sd(b_scale_init)/mean(apply(scale_samples, 1, sd)))^2)
+	lambda_theta <- 1/((sd(b_theta_init)/mean(apply(theta_samples, 1, sd)))^2)
 
 	#mean_testing <- mvrnorm(n=100, b_mean_init, s_inv/lambda_mean)
 	#scale_testing <- mvrnorm(n=100, b_scale_init, s_inv/lambda_scale)	
-	#mean_testing <- mvrnorm(n=100, b_mean_init, s_inv/lambda_mean_init)
+	theta_testing <- mvrnorm(n=100, b_theta_init, s_inv/lambda_theta_init)
 	
 	### Create output list and return
-	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior), b_init = list(mean = b_mean_init, scale = b_scale_init), lambda_init = list(mean = lambda_mean, scale = lambda_scale))
+	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior,  theta = b_0_theta_prior), b_init = list(mean = b_mean_init, scale = b_scale_init, theta = b_theta_init), lambda_init = list(mean = lambda_mean, scale = lambda_scale, theta = lambda_theta))
 	return(output_list)
 
 }
