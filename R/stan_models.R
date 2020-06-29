@@ -10,6 +10,12 @@
 #' @return A matrix of the infile
 #' @export
 cyclic_model <- '
+functions {
+  double myqgamma(double p, double shape, double scale) {
+      boost::math::gamma_distribution<> dist(shape, scale); 
+      return quantile(dist, p);
+  }
+}
 data {
   int<lower=0> N;  //number of points
   vector[N] y;     // list of y values from data
@@ -45,6 +51,8 @@ parameters {
   real<lower=0> lambda_mean ;
   real<lower=0> lambda_scale ;
   real<lower=0> lambda_theta ;
+
+  real<lower=0> sigma;
 }
 transformed parameters { 
   matrix[basis_dim, basis_dim] K_mean; 
@@ -66,6 +74,8 @@ transformed parameters {
   theta_param = exp(theta_log)./(exp(theta_log) + rep_vector(1, N));
 } 
 model {
+  sigma ~ cauchy(0,1);
+
   lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
   lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
   lambda_theta ~ gamma(lambda_theta_prior[1], lambda_theta_prior[2]);
@@ -79,22 +89,33 @@ model {
    b_0_theta ~ normal(b_0_theta_prior[1],b_0_theta_prior[2]);   
    b_theta ~ multi_normal_prec(b_theta_prior, K_theta); 
   
-  // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter
+  // Assume SPI for step n is the same as SPI for step n - 1
   for(n in 2:N){
-		prob_previous = gamma_cdf(y[n-1], mean_param, )
-		//Need to adjust for theta
-		spi_previous = inv_Phi(prob_previous)
+		if (y[n-1] == 0)
+			spi_previous = inv_Phi(0.5 * theta_param[n-1]);
+		else {
+			// Add adjustment for theta so it is (1-theta) * prob + theta
+			prob_previous = (1-theta[n-1])*(gamma_cdf(y[n-1], mean_param[n-1] / scale_param[n-1], inv(scale_param[n-1])) + theta[n-1];
+			spi_previous = inv_Phi(prob_previous);
+		}
 
+		// This is where you would have an adjustment of the spi
+		spi_n = spi_previous;
+		prob_n = Phi(spi_n);
+		// If prob less than theta, zero above gamma with adjustment
+		if (prob_n < theta[n])
+			precip_n = 0;
+		else {
+			precip_n = myqgamma(prob_n, mean_param[n] / scale_param[n], scale_param[n]);
+		}
 
+	y[n] ~ normal(precip, sigma);
   }  
  
 }
 generated quantities {
 }
 '
-
-
-
 
 
 #' Tensor Product Stan model
