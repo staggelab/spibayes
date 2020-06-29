@@ -60,14 +60,14 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 	### Calculate the estimate of mean and scale for the demo basis
 	b_mean_est <- x_orig %*% t(b_full_mean)
 	b_scale_est <- x_orig %*% t(b_full_scale)
-	b_scale_est <- x_orig %*% t(b_theta_scale)
+	b_theta_est <- x_orig %*% t(b_full_theta)
 
 	if (type == "cyclic"){
 		mean_est <- data.frame(select(newdata, "jdate", "year"), b_mean_est) %>%
 			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="mean") 
 		scale_est <- data.frame(select(newdata, "jdate", "year"), b_scale_est)  %>%
 			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="scale") 
-		theta_est <- data.frame(select(newdata, "jdate", "year"), theta_est) %>%
+		theta_est <- data.frame(select(newdata, "jdate", "year"), b_theta_est) %>%
 			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="theta_logodds") 
 	} else {
 	### Gather the results into a long dataframe
