@@ -80,15 +80,12 @@ model {
    b_theta ~ multi_normal_prec(b_theta_prior, K_theta); 
   
   // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter
- // y ~ gamma(mean_param ./ scale_param, rep_vector(1, N) ./ scale_param);  // shape is mean over scale, rate is 1 over scale
+  for(n in 2:N){
+		prob_previous = gamma_cdf(y[n-1], mean_param, )
+		//Need to adjust for theta
+		spi_previous = inv_Phi(prob_previous)
 
-  for(n in 1:N){
-   if (y[n] == 0)
-      1 ~ bernoulli(theta_param[n]);
-    else {
-      0 ~ bernoulli(theta_param[n]);
-      y[n] ~ gamma(mean_param[n] / scale_param[n], inv(scale_param[n]) );
-    }	
+
   }  
  
 }
