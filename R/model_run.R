@@ -113,8 +113,14 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 #' @export
 spi_cyclic <- function(data, init_vals, n_chains, iter, cores){
 
+	### Write model to file
+	stan_dir <- file.path(cmdstan_path(), "spibayes")
+	dir.create(stan_dir, recursive=TRUE, showWarnings = FALSE)
+	stan_program <- file.path(stan_dir, "cyclic_model.stan")
+	writeLines(cyclic_model, stan_program)
+
 	### Compile model
-	mod <- cmdstan_model("cyclic_model.stan")
+	mod <- cmdstan_model(stan_program)
 
 	### Fit the model
 	model_fit <- mod$sample(
