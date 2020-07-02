@@ -11,7 +11,7 @@
 #' @return A matrix of the infile
 #' @export
 spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "free"){
-	require(rstan)
+	require(cmdstanr)
 
 	### Extract important values from the input object
 	y <-  spi_input$data$precip
@@ -82,7 +82,7 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 		### Insert the S penaly matrix, which is different shape for cyclic than tensor
 		data_fitting[["S"]] <- as.matrix(Matrix::nearPD(spi_input$s_reparam)$mat)
 
-		### Run model
+		### Compile model
 		model_fit <- spi_cyclic(data = data_fitting, init_vals = init_vals, n_chains = n_chains, iter = iter, cores = cores)
 
 	} else if (spi_input$type == "tensor"){
@@ -113,14 +113,20 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 #' @export
 spi_cyclic <- function(data, init_vals, n_chains, iter, cores){
 
+	### Compile model
+	mod <- cmdstan_model("cyclic_model.stan")
+
 	### Fit the model
-	model_fit <- rstan::stan(model_code = cyclic_model, 
-		data = data, 
-		init = init_vals,
-		iter = iter, 
-		chains = n_chains,
-		cores = cores, 
-		verbose = FALSE)
+	model_fit <- mod$sample(
+  		data = data,
+		  init = init_vals,
+		  seed = 123,
+		  chains = n_chains,
+		  #output_dir = "/media/data/Documents/work_folder/projects_research/code/spi_paper/output/", 
+		  iter_sampling = round(iter * 0.6), 
+		  iter_warmup = round(iter * 0.4), 
+		  save_warmup = TRUE
+	)
 
 	return(model_fit)
 }
@@ -139,6 +145,7 @@ spi_cyclic <- function(data, init_vals, n_chains, iter, cores){
 spi_tensor <- function(data, init_vals, n_chains, iter, cores,  lambda_year){
 
 	if(lambda_year == "free"){
+
 	### Fit the model
 	model_fit <- rstan::stan(model_code = tensor_model, 
 		data = data, 
