@@ -9,12 +9,18 @@
 #' @param knot_loc List of knot locations
 #' @return A matrix of the infile
 #' @export
-cyclic_model <- '
-functions {
-  double myqgamma(double p, double shape, double scale) {
-      boost::math::gamma_distribution<> dist(shape, scale); 
-      return quantile(dist, p);
-  }
+cyclic_model <- "
+functions { 
+
+vector qgamma(vector y,        // unknowns
+              vector theta,    // parameters
+              real[] x_r,      // data (real)
+              int[] x_i) {     // data (integer)
+  vector[1] z;
+  z[1] = gamma_cdf(y, theta[1], 1/theta[2]) - x_r[1];
+  return z;
+}
+
 }
 data {
   int<lower=0> N;  //number of points
@@ -74,6 +80,17 @@ transformed parameters {
   theta_param = exp(theta_log)./(exp(theta_log) + rep_vector(1, N));
 } 
 model {
+  real spi_previous;
+  real prob_previous;
+  real spi_n;
+  vector[1] precip_n;
+  real prob_n;
+
+  int x_i[0];
+  real x_r[1];
+  vector[2] theta;
+  vector[1] y_guess = [2]';
+
   sigma ~ cauchy(0,1);
 
   lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
@@ -89,33 +106,33 @@ model {
    b_0_theta ~ normal(b_0_theta_prior[1],b_0_theta_prior[2]);   
    b_theta ~ multi_normal_prec(b_theta_prior, K_theta); 
   
-  // Assume SPI for step n is the same as SPI for step n - 1
   for(n in 2:N){
 		if (y[n-1] == 0)
 			spi_previous = inv_Phi(0.5 * theta_param[n-1]);
 		else {
 			// Add adjustment for theta so it is (1-theta) * prob + theta
-			prob_previous = (1-theta[n-1])*(gamma_cdf(y[n-1], mean_param[n-1] / scale_param[n-1], inv(scale_param[n-1])) + theta[n-1];
+			prob_previous = (1-theta_param[n-1])*(gamma_cdf(y[n-1], mean_param[n-1] / scale_param[n-1], inv(scale_param[n-1]))) + theta_param[n-1] ;
 			spi_previous = inv_Phi(prob_previous);
 		}
 
-		// This is where you would have an adjustment of the spi
 		spi_n = spi_previous;
 		prob_n = Phi(spi_n);
 		// If prob less than theta, zero above gamma with adjustment
-		if (prob_n < theta[n])
+		if (prob_n < theta_param[n])
 			precip_n = 0;
 		else {
-			precip_n = myqgamma(prob_n, mean_param[n] / scale_param[n], scale_param[n]);
-		}
+            x_r[1] = prob_n;
+            theta = [mean_param[n] / scale_param[n], scale_param[n]]';
+			precip_n = algebra_solver(qgamma, y_guess, theta, x_r, x_i);
+     	}
 
-	y[n] ~ normal(precip, sigma);
+	y[n] ~ normal(precip_n, sigma);
   }  
  
 }
 generated quantities {
 }
-'
+"
 
 
 #' Tensor Product Stan model
