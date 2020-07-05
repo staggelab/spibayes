@@ -1,5 +1,5 @@
 functions {
-  int fib(int n);
+  real qgamma(real p, real alpha, real scale);
 }
 data {
   int<lower=0> N;  //number of points
@@ -33,9 +33,9 @@ model {
   }   
 }
 generated quantities {
-int fib_result;
+real shoop;
 
-fib_result = fib(35);
+shoop = qgamma(0.3, 0.5, 5);
 
 }
 

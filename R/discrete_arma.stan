@@ -1,12 +1,12 @@
 functions { 
 
-vector qgamma(vector y,        // unknowns
-              vector theta,    // parameters
-              real[] x_r,      // data (real)
-              int[] x_i) {     // data (integer)
-  vector[1] z;
-  z[1] = gamma_cdf(y, theta[1], 1/theta[2]) - x_r[1];
-  return z;
+//vector qgamma(vector y,        // unknowns
+ //             vector theta,    // parameters
+ //             real[] x_r,      // data (real)
+ //             int[] x_i) {     // data (integer)
+//  vector[1] z;
+//  z[1] = gamma_cdf(y, theta[1], 1/theta[2]) - x_r[1];
+//  return z;
 }
 
 }
@@ -35,5 +35,8 @@ model {
 }
 generated quantities {
   
+	
+
+
 }
 

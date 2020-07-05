@@ -1,5 +1,6 @@
 functions {
-  int fib(int n);
+  int ka(int n);
+  real sinc(real x);
 }
 data {
   int<lower=0> N;  //number of points
@@ -33,9 +34,12 @@ model {
   }   
 }
 generated quantities {
-int fib_result;
+int shoop;
+real sinc_pi;
 
-fib_result = fib(35);
+shoop = ka(35);
+
+sinc_pi = sinc(pi());
 
 }
 
