@@ -9,7 +9,7 @@
 #' @param knot_loc List of knot locations
 #' @return A matrix of the infile
 #' @export
-cyclic_model <- '
+cyclic_model <- "
 data {
   int<lower=0> N;  //number of points
   vector[N] y;     // list of y values from data
@@ -93,8 +93,15 @@ model {
  
 }
 generated quantities {
+
+real secderiv_mean;
+real secderiv_scale;
+
+secderiv_mean = b_mean' * S * b_mean; 
+secderiv_scale = b_scale' * S * b_scale; 
+
 }
-'
+"
 
 
 
