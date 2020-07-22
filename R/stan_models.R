@@ -1,3 +1,4 @@
+
 #' Cyclic Stan model
 #'
 #' This is where you describe the function itself
@@ -12,26 +13,32 @@
 cyclic_model <- "
 data {
   int<lower=0> N;  //number of points
-  vector[N] y;     // list of y values from data
-	
+  int<lower=0> N_pos;  //number of days with positive precip
+
   int<lower=0> basis_dim;
-  
-  matrix[N,basis_dim] X; 
+
+  vector[N_pos] y_pos;     // list of y values with positive precip
+  int<lower=0,upper=1> y_zero[N];     // list of one or zero for positive precip
+ 
+  matrix[N_pos,basis_dim] X_pos;  // Basis for positive precip days
+  matrix[N,basis_dim] X;   // Basis for all days
+
   matrix[basis_dim, basis_dim] S; 
     
   vector[2] b_0_mean_prior; 
   vector[2] b_0_scale_prior; 
   vector[2] b_0_theta_prior; 
 
-  vector[basis_dim] b_mean_prior; 
-  vector[basis_dim] b_scale_prior; 
-  vector[basis_dim] b_theta_prior; 
-
   vector[2] lambda_mean_prior; 
   vector[2] lambda_scale_prior; 
   vector[2] lambda_theta_prior; 
  }
 transformed data {  
+  vector[basis_dim] zeros; 
+  vector[N_pos] ones_pos; 
+
+  zeros = rep_vector(0, basis_dim) ;
+  ones_pos = rep_vector(1, N_pos) ;
 }
 parameters {
   real b_0_mean;
@@ -51,19 +58,16 @@ transformed parameters {
   matrix[basis_dim, basis_dim] K_scale; 
   matrix[basis_dim, basis_dim] K_theta; 
  
-  vector<lower=0>[N] mean_param;  
-  vector<lower=0>[N] scale_param;
-  vector[N] theta_log;
-  vector<lower=0, upper =1>[N] theta_param;
- 
+  vector<lower=0>[N_pos] mean_param;  
+  vector<lower=0>[N_pos] scale_param;
+
   K_mean = S * lambda_mean ;
   K_scale = S * lambda_scale ;
   K_theta = S * lambda_theta ;
   
-  mean_param = to_vector(X * b_mean) + b_0_mean;
-  scale_param = to_vector(X * b_scale) + b_0_scale;
-  theta_log = to_vector(X * b_theta) + b_0_theta;
-  theta_param = exp(theta_log)./(exp(theta_log) + rep_vector(1, N));
+  mean_param = X_pos * b_mean + b_0_mean;
+  scale_param = X_pos * b_scale + b_0_scale;
+
 } 
 model {
   lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
@@ -71,29 +75,24 @@ model {
   lambda_theta ~ gamma(lambda_theta_prior[1], lambda_theta_prior[2]);
 	
    b_0_mean  ~ normal(b_0_mean_prior[1],b_0_mean_prior[2]);   
-   b_mean ~ multi_normal_prec(b_mean_prior,K_mean); 
+   b_mean ~ multi_normal_prec(zeros,K_mean); 
  
    b_0_scale  ~ normal(b_0_scale_prior[1],b_0_scale_prior[2]);  
-   b_scale ~ multi_normal_prec(b_scale_prior,K_scale); 
+   b_scale ~ multi_normal_prec(zeros,K_scale); 
 
    b_0_theta ~ normal(b_0_theta_prior[1],b_0_theta_prior[2]);   
-   b_theta ~ multi_normal_prec(b_theta_prior, K_theta); 
+   b_theta ~ multi_normal_prec(zeros, K_theta); 
   
   // Estimate y values using a gamma distribution, Stan uses rate, rather than scale parameter
- // y ~ gamma(mean_param ./ scale_param, rep_vector(1, N) ./ scale_param);  // shape is mean over scale, rate is 1 over scale
+   y_pos ~ gamma(mean_param ./ scale_param, ones_pos ./ scale_param);  // shape is mean over scale, rate is 1 over scale
+ //  y_pos ~ gamma((X_pos * b_mean + b_0_mean) ./ (X_pos * b_scale + b_0_scale), ones_pos ./ (X_pos * b_scale + b_0_scale));  // shape is mean over scale, rate is 1 over scale
+  // y_pos ~ gamma(shape_param, rate_param);  // shape is mean over scale, rate is 1 over scale
 
-  for(n in 1:N){
-   if (y[n] == 0)
-      1 ~ bernoulli(theta_param[n]);
-    else {
-      0 ~ bernoulli(theta_param[n]);
-      y[n] ~ gamma(mean_param[n] / scale_param[n], inv(scale_param[n]) );
-    }	
-  }  
- 
+  // Estimate zeros using logit model
+	y_zero ~ bernoulli_logit(b_0_theta + X * b_theta);
+
 }
 generated quantities {
-
 real secderiv_mean;
 real secderiv_scale;
 
@@ -102,8 +101,6 @@ secderiv_scale = b_scale' * S * b_scale;
 
 }
 "
-
-
 
 
 
@@ -126,8 +123,9 @@ data {
   int<lower=0> basis_dim;
   
   matrix[N,basis_dim] X; 
-  cov_matrix[basis_dim] S_1; 
-  cov_matrix[basis_dim] S_2; 
+  // Could declare cov_matrix but this involved a repeated check and so slows things down
+  matrix[basis_dim, basis_dim] S_1; 
+  matrix[basis_dim, basis_dim] S_2; 
   
   vector[2] b_0_mean_prior; 
   vector[2] b_0_scale_prior; 

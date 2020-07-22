@@ -13,12 +13,28 @@
 spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "free"){
 	require(rstan)
 
+
+	### Prepare for splitting
+	data_extract <- spi_input$data
+
+	data_extract <- data_extract %>%
+		mutate(id = seq(1, dim(data_extract)[1])) %>%
+		mutate(zero = c(precip == 0))
+
+	id_pos <- data_extract$id[data_extract$zero == FALSE]
+
 	### Extract important values from the input object
 	y <-  spi_input$data$precip
 	X <- spi_input$x_reparam
+	y_zero <- spi_input$data$zero
+
+	### Extract important values from the input object
+	y_pos <- y[id_pos]
+	X_pos <- X[id_pos,]
 
 	### Calculate some necesary dimensions
 	N <- length(y)
+	N_pos <- dim(X_pos)[1]
 	basis_dim <- dim(X)[2]
 	
 	### Error check that the basis and y values are of the same length
@@ -26,9 +42,12 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 
 	### Create the data to send to stan model
 	data_fitting <- list(N = N, 
+		N_pos = N_pos,
 		basis_dim = basis_dim, 
-		y= y, 
-		X = X,  
+		y_pos= y_pos, 
+		y_zero = y_zero,
+		X = X, 
+ 		X_pos = X_pos,
 		b_0_mean_prior=spi_input$b_0$mean, 
 		b_0_scale_prior=spi_input$b_0$scale,
 		b_0_theta_prior=spi_input$b_0$theta,
@@ -38,10 +57,6 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 	)
 	
 	if (spi_input$type == "cyclic"){
-		data_fitting$b_mean_prior = spi_input$b_init$mean
-		data_fitting$b_scale_prior = spi_input$b_init$scale
-		data_fitting$b_theta_prior = spi_input$b_init$theta
-
 		data_fitting$lambda_mean_prior <- c(5, 5/spi_input$lambda_init$mean)
  		data_fitting$lambda_scale_prior <- c(5, 5/spi_input$lambda_init$scale)
  		data_fitting$lambda_theta_prior <- c(5, 5/spi_input$lambda_init$theta)
@@ -66,6 +81,17 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 		lambda_mean_first = spi_input$lambda_init$mean[1], 
 		lambda_scale_first = spi_input$lambda_init$scale[1]
 	))
+
+	if (spi_input$type == "cyclic"){
+		init_vals[[1]]$lambda_mean <- spi_input$lambda_init$mean[1]
+		init_vals[[1]]$lambda_scale <-  spi_input$lambda_init$scale[1]
+		init_vals[[1]]$lambda_theta <-  spi_input$lambda_init$theta[1]
+	}
+
+	if (spi_input$type == "tensor"){
+		init_vals[[1]]$lambda_mean_first <- spi_input$lambda_init$mean[1]
+		init_vals[[1]]$lambda_scale_first <-  spi_input$lambda_init$scale[1]
+	}
 
 	if (spi_input$type == "tensor" & lambda_year == "free"){
 		init_vals[[1]]$lambda_mean_second <- spi_input$lambda_init$mean[2]
