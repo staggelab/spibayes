@@ -40,10 +40,13 @@ create_cyclic_basis <- function(data, knot_loc){
 	n_knots <- sapply(knot_loc, FUN = length)
 	
 	### Create cyclic spline basis
-	spline_orig <- mgcv::smoothCon(s(jdate, bs="cc", k = n_knots), data=data, knots = knot_loc, null.space.penalty = TRUE)
+	spline_orig <- mgcv::smoothCon(s(jdate, bs="cc", k = n_knots), data=data, knots = knot_loc, null.space.penalty = FALSE)
 
 	### Create cyclic spline basis with absorbed constraint
-	spline_reparam <- mgcv::smoothCon(s(jdate, bs="cc", k = n_knots), data=data, knots = knot_loc, absorb.cons=TRUE, null.space.penalty = TRUE)
+	spline_reparam <- mgcv::smoothCon(s(jdate, bs="cc", k = n_knots), data=data, knots = knot_loc, absorb.cons=TRUE, null.space.penalty = FALSE)
+
+	### Create cyclic spline basis with absorbed constraint
+	spline_diag <- mgcv::smoothCon(s(jdate, bs="cc", k = n_knots), data=data, knots = knot_loc, absorb.cons=TRUE, null.space.penalty = FALSE, diagonal.penalty = TRUE)
 
 	### Extract the matrices for basis and penalty term
 	X_orig <- spline_orig[[1]]$X
@@ -52,7 +55,7 @@ create_cyclic_basis <- function(data, knot_loc){
 	s_reparam <- spline_reparam[[1]]$S[[1]]
 
 	### Reparameterize both using the QR decomposition following Wood 
-	### Where Z is the Q matrix without the first column, used to reparameterize
+	### Where Z is the Q matrix without the first column, used to reparameterize betas from reparam to original
 	C <- rep(1, nrow(X_orig)) %*% X_orig
 	qrc <- qr(t(C))
 	Z <- qr.Q(qrc,complete=TRUE)[,(nrow(C)+1):ncol(C)]
@@ -60,8 +63,15 @@ create_cyclic_basis <- function(data, knot_loc){
 	### Calculate reparameterized matrices for basis and penalty
 	X_reparam <- X_orig%*%Z
 
+	### Extract the matrix for diagonalized basis
+	### Incorporates multivariate normal into basis. Only works for single predictor, not used for tensor
+	X_diag <- spline_diag[[1]]$X
+
+	### Extract the matrix to transfrom from diagonalized to reparameterized betas
+	p <- spline_diag[[1]]$diagRP
+
 	### Create the output and return
-	output_list <- list(x_orig = X_orig, x_reparam = X_reparam, z = Z, s_reparam = s_reparam, c = C, qrc = qrc)
+	output_list <- list(x_orig = X_orig, x_reparam = X_reparam, x_diag = X_diag, z = Z, s_reparam = s_reparam, c = C, qrc = qrc, p = p)
 	return(output_list)
 }
 
