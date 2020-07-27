@@ -58,55 +58,69 @@ prior_cyclic <- function(data, knot_loc ){
 	#	dplyr::ungroup()
 
 	### Fit a cyclic spline model using mgcv
-	mean_model <- mgcv::gam(mean ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
-	scale_model <- mgcv::gam(scale ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
+	shape_model <- mgcv::gam(log(shape) ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
+	rate_model <- mgcv::gam(log(rate) ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
 	theta_model <- mgcv::gam(zero ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE,family=binomial)
 
 	### Create the prior for the mean intercept
-	b_0_mean_prior <- c(summary(mean_model)$p.table[1], summary(mean_model)$p.table[2])
-	b_0_scale_prior <- c(summary(scale_model)$p.table[1], summary(scale_model)$p.table[2])
+	b_0_shape_prior <- c(summary(shape_model)$p.table[1], summary(shape_model)$p.table[2])
+	b_0_rate_prior <- c(summary(rate_model)$p.table[1], summary(rate_model)$p.table[2])
 	b_0_theta_prior <- c(summary(theta_model)$p.table[1], summary(theta_model)$p.table[2])
 
 	### Create a vector for intializing the mean
-	b_mean_init <- c(coef(mean_model)[2:length(coef(mean_model))])
-	b_scale_init <- c(coef(scale_model)[2:length(coef(scale_model))])
+	b_shape_init <- c(coef(shape_model)[2:length(coef(shape_model))])
+	b_rate_init <- c(coef(rate_model)[2:length(coef(rate_model))])
 	b_theta_init <- c(coef(theta_model)[2:length(coef(theta_model))])
 
 	### Extract smoothing penalty
-	lambda_mean_init <- unname(c(mean_model$sp ))
-	lambda_scale_init <- unname(c(scale_model$sp))
+	lambda_shape_init <- unname(c(shape_model$sp ))
+	lambda_rate_init <- unname(c(rate_model$sp))
 	lambda_theta_init <- unname(c(theta_model$sp))
 
 	### Calculate alpha the rescaling factor and then rescale
-	mean_alpha <- sapply(mean_model$smooth, "[[", "S.scale") / lambda_mean_init
-	lambda_mean_init <- c(lambda_mean_init / mean_alpha)
+	shape_alpha <- sapply(shape_model$smooth, "[[", "S.scale") / lambda_shape_init
+	lambda_shape_init <- c(lambda_shape_init / shape_alpha)
 
-	scale_alpha <- sapply(scale_model$smooth, "[[", "S.scale") / lambda_scale_init
-	lambda_scale_init <- c(lambda_scale_init / scale_alpha)
+	rate_alpha <- sapply(rate_model$smooth, "[[", "S.scale") / lambda_rate_init
+	lambda_rate_init <- c(lambda_rate_init / rate_alpha)
 
 	theta_alpha <- sapply(theta_model$smooth, "[[", "S.scale") / lambda_theta_init
 	lambda_theta_init <- c(lambda_theta_init / theta_alpha)
 
 	### Extract penalty matrix
-	s_matrix <- mean_model$smooth[[1]]$S[[1]]
-	s_inv <- MASS::ginv(s_matrix)
+	s_matrix <- shape_model$smooth[[1]]$S[[1]]
+	#s_inv <- MASS::ginv(s_matrix)
 
 	### Rescale to match standard devs
 	### Might not need to do this
-	mean_samples <- mvrnorm(n=100, b_mean_init, s_inv)
-	scale_samples <- mvrnorm(n=100, b_scale_init, s_inv)
-	theta_samples <- mvrnorm(n=100, b_theta_init, s_inv)
+	#shape_samples <- mvrnorm(n=100, b_shape_init, s_inv)
+	#rate_samples <- mvrnorm(n=100, b_rate_init, s_inv)
+	#theta_samples <- mvrnorm(n=100, b_theta_init, s_inv)
 
-	lambda_mean <- 1/((sd(b_mean_init)/mean(apply(mean_samples, 1, sd)))^2)
-	lambda_scale <- 1/((sd(b_scale_init)/mean(apply(scale_samples, 1, sd)))^2)
-	lambda_theta <- 1/((sd(b_theta_init)/mean(apply(theta_samples, 1, sd)))^2)
+	#lambda_shape <- 1/((sd(b_shape_init)/mean(apply(shape_samples, 1, sd)))^2)
+	#lambda_rate <- 1/((sd(b_rate_init)/mean(apply(rate_samples, 1, sd)))^2)
+	#lambda_theta <- 1/((sd(b_theta_init)/mean(apply(theta_samples, 1, sd)))^2)
 
 	#mean_testing <- mvrnorm(n=100, b_mean_init, s_inv/lambda_mean)
 	#scale_testing <- mvrnorm(n=100, b_scale_init, s_inv/lambda_scale)	
-	theta_testing <- mvrnorm(n=100, b_theta_init, s_inv/lambda_theta_init)
+	#theta_testing <- mvrnorm(n=100, b_theta_init, s_inv/lambda_theta_init)
 	
+	rho_init_shape <- log(lambda_shape_init)
+	rho_init_rate <- log(lambda_rate_init)
+	rho_init_theta <- log(lambda_theta_init)
+
+	rho_shape_prior <- c(rho_init_shape-3, rho_init_shape + 3)
+	rho_rate_prior <- c(rho_init_rate-3, rho_init_rate + 3)
+	rho_theta_prior <- c(rho_init_theta-3, rho_init_theta + 3)
+
 	### Create output list and return
-	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior,  theta = b_0_theta_prior), b_init = list(mean = b_mean_init, scale = b_scale_init, theta = b_theta_init), lambda_init = list(mean = lambda_mean, scale = lambda_scale, theta = lambda_theta))
+	output_list <- list(
+		b_0 = list(shape = b_0_shape_prior, rate = b_0_rate_prior,  theta = b_0_theta_prior), 
+		b_init = list(shape = b_shape_init, rate = b_rate_init, theta = b_theta_init), 
+		lambda_init = list(shape = lambda_shape_init, rate = lambda_rate_init, theta = lambda_theta_init), 
+		rho_init = list(shape = rho_init_shape, rate = rho_init_rate, theta = rho_init_theta),
+		rho_prior = list(shape = rho_shape_prior, rate = rho_rate_prior, theta = rho_theta_prior)
+	)
 	return(output_list)
 
 }

@@ -29,16 +29,16 @@ data {
   vector[2] b_0_rate_prior; 
   vector[2] b_0_theta_prior; 
 
-  vector[2]  rho_shape_prior; 
-  vector[2]  rho_rate_prior; 
-  vector[2]  rho_theta_prior; 
+  real lambda_shape_prior; 
+  real lambda_rate_prior; 
+  real lambda_theta_prior; 
  }
 transformed data {  
   vector[basis_dim] zeros; 
-//  vector[N_pos] ones_pos; 
+  vector[N_pos] ones_pos; 
 
   zeros = rep_vector(0, basis_dim) ;
-//  ones_pos = rep_vector(1, N_pos) ;
+  ones_pos = rep_vector(1, N_pos) ;
 }
 parameters {
   real b_0_shape;
@@ -49,9 +49,9 @@ parameters {
   vector[basis_dim] b_rate;   
   vector[basis_dim] b_theta; 
  
-  real rho_shape ;
-  real rho_rate ;
-  real rho_theta;
+  real<lower=0> lambda_shape ;
+  real<lower=0> lambda_rate ;
+  real<lower=0> lambda_theta ;
 }
 transformed parameters { 
   matrix[basis_dim, basis_dim] K_shape; 
@@ -61,13 +61,6 @@ transformed parameters {
   vector[N_pos] shape_param;  
   vector[N_pos] rate_param;
 
-  real lambda_shape ;
-  real lambda_rate ;
-  real lambda_theta ;
-
-  lambda_shape = exp(rho_shape);
-  lambda_rate = exp(rho_rate);
-  lambda_theta = exp(rho_theta);
 
   K_shape = S * lambda_shape ;
   K_rate = S * lambda_rate ;
@@ -78,9 +71,13 @@ transformed parameters {
 
 } 
 model {
-  rho_shape ~ uniform(rho_shape_prior[1], rho_shape_prior[2]);
-  rho_rate ~ uniform(rho_rate_prior[1], rho_rate_prior[2]);
-  rho_theta ~ uniform(rho_theta_prior[1], rho_theta_prior[2]);
+ // lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
+ // lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
+ // lambda_theta ~ gamma(lambda_theta_prior[1], lambda_theta_prior[2]);
+	
+  lambda_shape ~ cauchy(0, lambda_shape_prior);
+  lambda_rate ~ cauchy(0, lambda_rate_prior);
+  lambda_theta ~ cauchy(0, lambda_theta_prior);
 
    b_0_shape  ~ normal(b_0_shape_prior[1],b_0_shape_prior[2]);   
    b_shape ~ multi_normal_prec(zeros,K_shape); 
@@ -99,7 +96,13 @@ model {
 
 }
 generated quantities {
+  real rho_shape ;
+  real rho_rate ;
+  real rho_theta;
 
+  rho_shape = exp(lambda_shape);
+  rho_rate = exp(lambda_rate);
+  rho_theta = exp(lambda_theta);
 }
 "
 
@@ -150,9 +153,9 @@ data {
   vector[2] b_0_rate_prior; 
   vector[2] b_0_theta_prior; 
 
-  vector[2]  rho_shape_prior; 
-  vector[2]  rho_rate_prior; 
-  vector[2]  rho_theta_prior; 
+  real lambda_shape_prior; 
+  real lambda_rate_prior; 
+  real lambda_theta_prior; 
  }
 transformed data {  
   vector[basis_dim] zeros; 
@@ -169,34 +172,43 @@ parameters {
   vector[basis_dim] b_shape;  
   vector[basis_dim] b_rate;   
   vector[basis_dim] b_theta; 
-  
-  real rho_shape ;
-  real rho_rate ;
-  real rho_theta;
+ 
+  real lambda_shape ;
+  real lambda_rate ;
+  real lambda_theta ;
+
+//  real rho_shape ;
+//  real rho_rate ;
+//  real rho_theta;
 }
 transformed parameters { 
   vector[N_pos] shape_param;  
   vector[N_pos] rate_param;
 
-  real lambda_shape ;
-  real lambda_rate ;
-  real lambda_theta ;
+//  real lambda_shape ;
+//  real lambda_rate ;
+//  real lambda_theta ;
 
   shape_param = exp(X_pos * b_shape + b_0_shape);
   rate_param = exp(X_pos * b_rate + b_0_rate);
 
-  lambda_shape = exp(rho_shape);
-  lambda_rate = exp(rho_rate);
-  lambda_theta = exp(rho_theta);
+// lambda_shape = exp(rho_shape);
+// lambda_rate = exp(rho_rate);
+// lambda_theta = exp(rho_theta);
 } 
 model {
-//  lambda_shape ~ cauchy(0, lambda_shape_prior);
-//  lambda_rate ~ cauchy(0, lambda_rate_prior);
-//  lambda_theta ~ cauchy(0, lambda_theta_prior);
+ // lambda_mean ~ gamma(lambda_mean_prior[1], lambda_mean_prior[2]);
+ // lambda_scale ~ gamma(lambda_scale_prior[1], lambda_scale_prior[2]);
+ // lambda_theta ~ gamma(lambda_theta_prior[1], lambda_theta_prior[2]);
 
-  rho_shape ~ uniform(rho_shape_prior[1], rho_shape_prior[2]);
-  rho_rate ~ uniform(rho_rate_prior[1], rho_rate_prior[2]);
-  rho_theta ~ uniform(rho_theta_prior[1], rho_theta_prior[2]);
+  lambda_shape ~ cauchy(0, lambda_shape_prior);
+  lambda_rate ~ cauchy(0, lambda_rate_prior);
+  lambda_theta ~ cauchy(0, lambda_theta_prior);
+
+//  rho_shape ~ uniform(-12, 12);
+//  rho_rate ~ uniform(-12, 12);
+//  rho_theta ~ uniform(-12, 12);
+
 
    b_0_shape  ~ normal(b_0_shape_prior[1],b_0_shape_prior[2]);   
    b_shape ~  normal(zeros,lambda_shape); 
@@ -215,6 +227,13 @@ model {
 
 }
 generated quantities {
+  real rho_shape ;
+  real rho_rate ;
+  real rho_theta;
+
+  rho_shape = exp(lambda_shape);
+  rho_rate = exp(lambda_rate);
+  rho_theta = exp(lambda_theta);
 
 }
 "

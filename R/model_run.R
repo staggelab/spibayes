@@ -10,9 +10,8 @@
 #' @import rstan
 #' @return A matrix of the infile
 #' @export
-spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "free"){
+spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "free", diagonalize = FALSE){
 	require(rstan)
-
 
 	### Prepare for splitting
 	data_extract <- spi_input$data
@@ -23,10 +22,15 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 
 	id_pos <- data_extract$id[data_extract$zero == FALSE]
 
-	### Extract important values from the input object
+	### Extract precipitation
 	y <-  spi_input$data$precip
-	X <- spi_input$x_reparam
 	y_zero <- spi_input$data$zero
+
+	if (spi_input$type == "cyclic" & diagonalize == TRUE){
+		X <- spi_input$x_diag
+	} else {
+		X <- spi_input$x_reparam
+	}
 
 	### Extract important values from the input object
 	y_pos <- y[id_pos]
@@ -48,19 +52,13 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 		y_zero = y_zero,
 		X = X, 
  		X_pos = X_pos,
-		b_0_mean_prior=spi_input$b_0$mean, 
-		b_0_scale_prior=spi_input$b_0$scale,
+		b_0_shape_prior=spi_input$b_0$shape, 
+		b_0_rate_prior=spi_input$b_0$rate,
 		b_0_theta_prior=spi_input$b_0$theta,
-		lambda_mean_prior = spi_input$lambda_prior$mean,
-		lambda_scale_prior = spi_input$lambda_prior$scale, 
-		lambda_theta_prior = spi_input$lambda_prior$theta
+		rho_shape_prior = spi_input$rho_prior$shape,
+		rho_rate_prior = spi_input$rho_prior$rate, 
+		rho_theta_prior = spi_input$rho_prior$theta
 	)
-	
-	if (spi_input$type == "cyclic"){
-		data_fitting$lambda_mean_prior <- c(5, 5/spi_input$lambda_init$mean)
- 		data_fitting$lambda_scale_prior <- c(5, 5/spi_input$lambda_init$scale)
- 		data_fitting$lambda_theta_prior <- c(5, 5/spi_input$lambda_init$theta)
-	}
 
 #	if (spi_input$type == "cyclic"){
 #		data_fitting$lambda_mean_prior <- c(0.5, data_fitting$lambda_mean_prior)
@@ -70,23 +68,37 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 #		data_fitting$lambda_scale_prior <- c(rep(0.5,2), data_fitting$lambda_scale_prior)
 #	}
 
+	### Add some variance around the b_0
+	data_fitting$b_0_shape_prior[[2]] <- 100 * 	data_fitting$b_0_shape_prior[[2]] 
+	data_fitting$b_0_rate_prior[[2]] <- 100 * 	data_fitting$b_0_rate_prior[[2]] 
+	data_fitting$b_0_theta_prior[[2]] <- 100 * 	data_fitting$b_0_theta_prior[[2]] 
+
 	### Create the initial values
 	init_vals <- list(list(
-		b_0_mean = spi_input$b_0$mean[1], 
-		b_0_scale = spi_input$b_0$scale[1], 
+		b_0_shape = spi_input$b_0$shape[1], 
+		b_0_rate = spi_input$b_0$rate[1], 
 		b_0_theta = spi_input$b_0$theta[1], 
-		b_mean = spi_input$b_init$mean, 
-		b_scale = spi_input$b_init$scale, 
+		b_shape = spi_input$b_init$shape, 
+		b_rate = spi_input$b_init$rate, 
 		b_theta = spi_input$b_init$theta, 
-		lambda_mean_first = spi_input$lambda_init$mean[1], 
-		lambda_scale_first = spi_input$lambda_init$scale[1]
+		lambda_shape_first = spi_input$lambda_init$shape[1], 
+		lambda_rate_first = spi_input$lambda_init$rate[1]
 	))
 
 	if (spi_input$type == "cyclic"){
-		init_vals[[1]]$lambda_mean <- spi_input$lambda_init$mean[1]
-		init_vals[[1]]$lambda_scale <-  spi_input$lambda_init$scale[1]
-		init_vals[[1]]$lambda_theta <-  spi_input$lambda_init$theta[1]
+		init_vals[[1]]$rho_shape <- spi_input$rho_init$shape[1]
+		init_vals[[1]]$rho_rate <-  spi_input$rho_init$rate[1]
+		init_vals[[1]]$rho_theta <-  spi_input$rho_init$theta[1]
 	}
+
+	### Convert initial betas to diagonalized reparameterization
+	if (spi_input$type == "cyclic" & diagonalize == TRUE){
+		p_inv <- ginv(spi_input$p)
+		init_vals[[1]]$b_shape <- c(p_inv %*% init_vals[[1]]$b_shape)
+		init_vals[[1]]$b_rate <- c(p_inv %*% init_vals[[1]]$b_rate)
+		init_vals[[1]]$b_theta <- c(p_inv %*% init_vals[[1]]$b_theta)
+	}
+
 
 	if (spi_input$type == "tensor"){
 		init_vals[[1]]$lambda_mean_first <- spi_input$lambda_init$mean[1]
@@ -103,8 +115,8 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 	if(n_chains > 1) {
 		for (j in seq(2, n_chains)) {
 			init_vals[[j]] <- init_vals[[1]]
-			init_vals[[j]]$lambda_mean <- lambda_mean_init*(10^runif(1, -2,2))
-			init_vals[[j]]$lambda_scale <- lambda_scale_init*(10^runif(1, -2,2))
+			init_vals[[j]]$lambda_shape <- lambda_shape_init*(10^runif(1, -2,2))
+			init_vals[[j]]$lambda_rate <- lambda_rate_init*(10^runif(1, -2,2))
 		}	
 	}
 
@@ -115,7 +127,7 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 		data_fitting[["S"]] <- as.matrix(Matrix::nearPD(spi_input$s_reparam)$mat)
 
 		### Run model
-		model_fit <- spi_cyclic(data = data_fitting, init_vals = init_vals, n_chains = n_chains, iter = iter, cores = cores)
+		model_fit <- spi_cyclic(data = data_fitting, init_vals = init_vals, n_chains = n_chains, iter = iter, cores = cores, diagonalize = diagonalize)
 
 	} else if (spi_input$type == "tensor"){
 		
@@ -143,9 +155,19 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 #' @param knot_loc List of knot locations
 #' @return A matrix of the infile
 #' @export
-spi_cyclic <- function(data, init_vals, n_chains, iter, cores){
+spi_cyclic <- function(data, init_vals, n_chains, iter, cores, diagonalize){
 
-	### Fit the model
+
+	if (diagonalize == TRUE){
+	model_fit <- rstan::stan(model_code = cyclic_model_diag, 
+		data = data, 
+		init = init_vals,
+		iter = iter, 
+		chains = n_chains,
+		cores = cores, 
+		verbose = FALSE)
+
+	} else {
 	model_fit <- rstan::stan(model_code = cyclic_model, 
 		data = data, 
 		init = init_vals,
@@ -153,6 +175,8 @@ spi_cyclic <- function(data, init_vals, n_chains, iter, cores){
 		chains = n_chains,
 		cores = cores, 
 		verbose = FALSE)
+
+	}
 
 	return(model_fit)
 }
@@ -174,7 +198,7 @@ spi_tensor <- function(data, init_vals, n_chains, iter, cores,  lambda_year){
 	### Fit the model
 	model_fit <- rstan::stan(model_code = tensor_model, 
 		data = data, 
-		init = init_vals,
+	#	init = init_vals,
 		iter = iter, 
 		chains = n_chains,
 		cores = cores, 
@@ -182,7 +206,7 @@ spi_tensor <- function(data, init_vals, n_chains, iter, cores,  lambda_year){
 	} else if (lambda_year == "fixed"){
 	model_fit <- rstan::stan(model_code = tensor_model_lambdafixed, 
 		data = data, 
-		init = init_vals,
+	#	init = init_vals,
 		iter = iter, 
 		chains = n_chains,
 		cores = cores, 
