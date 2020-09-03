@@ -9,11 +9,13 @@
 #' @param knot_loc List of knot locations
 #' @return A matrix of the infile
 #' @export
-create_basis <- function(data, type, knot_loc){
+create_basis <- function(data, type, knot_loc, newdata = FALSE){
+
+	### Send to appropriate basis function
 	if (type == "cyclic"){
-		output_list <- create_cyclic_basis(data = data, knot_loc = knot_loc)
+		output_list <- create_cyclic_basis(data = data, knot_loc = knot_loc, newdata = newdata)
 	} else if (type == "tensor"){
-		output_list <- create_tensor_basis(data = data, knot_loc = knot_loc)
+		output_list <- create_tensor_basis(data = data, knot_loc = knot_loc, newdata = newdata)
 	}
 
 	### Create the output and return
@@ -35,43 +37,83 @@ create_basis <- function(data, type, knot_loc){
 #' @param knot_loc List of knot locations
 #' @return A matrix of the infile
 #' @export
-create_cyclic_basis <- function(data, knot_loc){
+create_cyclic_basis <- function(data, knot_loc, newdata){
 	### Extract the number of knots
 	n_knots <- sapply(knot_loc, FUN = length)
+
+	### Extract positive precipitation
+	data_pos <- data %>%
+		filter(precip > 0)
+
+	### Check for newdata
+	### If false, give back the data with gaps for precipitation
+	### Else, use the gaps for fitting, but use full dataset for basis
+	if( newdata == FALSE) {
+		newdata <- data
+		newdata_pos <- data_pos
+	} else {
+		newdata <- newdata
+		newdata_pos <- newdata
+	}
+
+	### Create cyclic spline basis for precipitation
+	gamma_model <- mgcv::gam(list(precip 
+		~ ti(jdate, bs=c("cc"), k = n_knots[1]),
+		~ ti(jdate, bs=c("cc"), k = n_knots[1])),
+		data = data_pos, 
+		knots = list(jdate = knot_loc$jdate), 
+		family=gammals(link=list("identity","log")),
+		fit = FALSE, 
+		select = TRUE)
+
+	### Create cyclic spline basis for zero precipitation
+	theta_model <- mgcv::gam(zero 
+		~ ti(jdate, bs=c("cc"), k = c(n_knots[1])), 
+		data = data, 
+		knots = list(jdate = knot_loc$jdate), 
+		family=binomial,
+		fit = FALSE, 
+		select = TRUE)
+
+	### Extract basis matrix for mean
+	X_mean_jdate <- PredictMat(gamma_model$smooth[[1]],newdata_pos)
+
+	### Extract basis matrix for dispersion
+	X_disp_jdate <- PredictMat(gamma_model$smooth[[4]],newdata_pos)
+
+	### For zeros
+	X_theta_jdate <- PredictMat(gamma_model$smooth[[1]],newdata)
+
+	### Extract S Penalty matrices for positive
+	s_mean_jdate <- gamma_model$S[[1]]
+	s_disp_jdate <- gamma_model$S[[2]]
+
+	### Extract S Penalty matrices for zero precip
+	s_theta_jdate <- gamma_model$S[[1]]
+
+	### Extract S scaling function
+	s_scale_pos <- sapply(gamma_model$smooth, function(x){x$S.scale})
+	s_scale_zero <- sapply(gamma_model$smooth, function(x){x$S.scale})
 	
-	### Create cyclic spline basis
-	spline_orig <- mgcv::smoothCon(s(jdate, bs="cc", k = n_knots), data=data, knots = knot_loc, null.space.penalty = FALSE)
-
-	### Create cyclic spline basis with absorbed constraint
-	spline_reparam <- mgcv::smoothCon(s(jdate, bs="cc", k = n_knots), data=data, knots = knot_loc, absorb.cons=TRUE, null.space.penalty = FALSE)
-
-	### Create cyclic spline basis with absorbed constraint
-	spline_diag <- mgcv::smoothCon(s(jdate, bs="cc", k = n_knots), data=data, knots = knot_loc, absorb.cons=TRUE, null.space.penalty = FALSE, diagonal.penalty = TRUE)
-
-	### Extract the matrices for basis and penalty term
-	X_orig <- spline_orig[[1]]$X
-
-	### Reparameterize the penalty matrix
-	s_reparam <- spline_reparam[[1]]$S[[1]]
-
-	### Reparameterize both using the QR decomposition following Wood 
-	### Where Z is the Q matrix without the first column, used to reparameterize betas from reparam to original
-	C <- rep(1, nrow(X_orig)) %*% X_orig
-	qrc <- qr(t(C))
-	Z <- qr.Q(qrc,complete=TRUE)[,(nrow(C)+1):ncol(C)]
-
-	### Calculate reparameterized matrices for basis and penalty
-	X_reparam <- X_orig%*%Z
-
-	### Extract the matrix for diagonalized basis
-	### Incorporates multivariate normal into basis. Only works for single predictor, not used for tensor
-	X_diag <- spline_diag[[1]]$X
-
-	### Extract the matrix to transfrom from diagonalized to reparameterized betas
-	p <- spline_diag[[1]]$diagRP
-
+	### Extract basis dimensions
+	basis_dim_mean <- dim(X_mean_jdate)[2]
+	basis_dim_disp <- dim(X_disp_jdate)[2]
+	basis_dim_theta <- dim(X_theta_jdate)[2]
+	
 	### Create the output and return
-	output_list <- list(x_orig = X_orig, x_reparam = X_reparam, x_diag = X_diag, z = Z, s_reparam = s_reparam, c = C, qrc = qrc, p = p)
+	output_list <- list(x_mean = list(jdate = X_mean_jdate), 
+		x_disp = list(jdate = X_disp_jdate),
+		x_theta = list(jdate = X_theta_jdate),
+		s_mean = list(jdate = s_mean_jdate),
+		s_disp = list(jdate = s_disp_jdate)),
+		s_theta = list(jdate = s_theta_jdate)),
+		s_scale = list(pos = s_scale_pos, zero = s_scale_zero),
+		basis_dim = list(mean = basis_dim_mean, disp = basis_dim_disp, theta = basis_dim_theta),
+		gamma_model = gamma_model,
+		theta_model = theta_model
+	)
+
+	### Return the object
 	return(output_list)
 }
 
@@ -89,33 +131,102 @@ create_cyclic_basis <- function(data, knot_loc){
 create_tensor_basis <- function(data, knot_loc){
 	### Extract the number of knots
 	n_knots <- sapply(knot_loc, FUN = length)
+
+	### Extract positive precipitation
+	data_pos <- data %>%
+		filter(precip > 0)
+
+	### Check for newdata
+	### If false, give back the data with gaps for precipitation
+	### Else, use the gaps for fitting, but use full dataset for basis
+	if( newdata == FALSE) {
+		newdata <- data
+		newdata_pos <- data_pos
+	} else {
+		newdata <- newdata
+		newdata_pos <- newdata
+	}
+
+	### Create cyclic spline basis for precipitation
+	gamma_model <- mgcv::gam(list(precip 
+		~ ti(jdate, bs=c("cc"), k = n_knots[1]) + ti(year, bs=c("cr"), k = n_knots[2]) + ti(jdate,year, bs=c("cc", "cr"), k = n_knots),
+		~ ti(jdate, bs=c("cc"), k = n_knots[1]) + ti(year, bs=c("cr"), k = n_knots[2]) + ti(jdate,year, bs=c("cc", "cr"), k = n_knots)),
+		data = data_pos, 
+		knots = list(jdate = knot_loc$jdate), 
+		family=gammals(link=list("identity","log")),
+		fit = FALSE, 
+		select = TRUE)
+
+	### Create cyclic spline basis for zero precipitation
+	theta_model <- mgcv::gam(zero 
+		~ ti(jdate, bs=c("cc"), k = n_knots[1]) + ti(year, bs=c("cr"), k = n_knots[2]) + ti(jdate,year, bs=c("cc", "cr"), k = n_knots), 
+		data = data, 
+		knots = list(jdate = knot_loc$jdate), 
+		family=binomial,
+		fit = FALSE, 
+		select = TRUE)
+
+	### Extract basis matrix for mean
+	X_mean_jdate <- PredictMat(gamma_model$smooth[[1]],newdata_pos)
+	X_mean_year <- PredictMat(gamma_model$smooth[[2]],newdata_pos)
+	X_mean_tensor <- PredictMat(gamma_model$smooth[[3]],newdata_pos)
+
+	### Extract basis matrix for dispersion
+	X_disp_jdate <- PredictMat(gamma_model$smooth[[4]],newdata_pos)
+	X_disp_year <- PredictMat(gamma_model$smooth[[5]],newdata_pos)
+	X_disp_tensor <- PredictMat(gamma_model$smooth[[6]],newdata_pos)
+
+	### For zeros
+	X_theta_jdate <- PredictMat(gamma_model$smooth[[1]],newdata)
+	X_theta_year <- PredictMat(gamma_model$smooth[[2]],newdata)
+	X_theta_tensor <- PredictMat(gamma_model$smooth[[3]],newdata)
+
+	### Extract S Penalty matrices for positive
+	s_mean_jdate <- ti_model_pos$S[[1]]
+	s_mean_year <- ti_model_pos$S[[2]]
+	s_mean_year_double <- ti_model_pos$S[[3]]
+	s_mean_tensor_jdate <- ti_model_pos$S[[4]]
+	s_mean_tensor_year <- ti_model_pos$S[[5]]
+
+	s_disp_jdate <- ti_model_pos$S[[6]]
+	s_disp_year <- ti_model_pos$S[[7]]
+	s_disp_year_double <- ti_model_pos$S[[8]]
+	s_disp_tensor_jdate <- ti_model_pos$S[[9]]
+	s_disp_tensor_year <- ti_model_pos$S[[10]]
+
+	### Extract S Penalty matrices for zero precip
+	s_theta_jdate <- ti_model_zero$S[[1]]
+	s_theta_year <- ti_model_zero$S[[2]]
+	s_theta_year_double <- ti_model_zero$S[[3]]
+	s_theta_tensor_jdate <- ti_model_zero$S[[4]]
+	s_theta_tensor_year <- ti_model_zero$S[[5]]
+
+	### Extract S scaling function
+	s_scale_pos <- sapply(ti_model_pos$smooth, function(x){x$S.scale})
+	s_scale_zero <- sapply(ti_model_zero$smooth, function(x){x$S.scale})
 	
-	### Create cyclic spline basis
-	spline_orig <- mgcv::smoothCon(te(jdate,year, bs=c("cc", "cr"), k = n_knots), data=data, knots = knot_loc, null.space.penalty = TRUE)
-
-	### Create cyclic spline basis with absorbed constraint
-	spline_reparam <- mgcv::smoothCon(te(jdate,year, bs=c("cc", "cr"), k = n_knots), data=data, knots = knot_loc, absorb.cons=TRUE, null.space.penalty = TRUE)
-
-	### Extract the matrices for basis and penalty term
-	X_orig <- spline_orig[[1]]$X
-
-	### Reparameterize the penalty matrix
-	s_reparam <- list()
-	s_reparam[[1]] <- spline_reparam[[1]]$S[[1]]
-	s_reparam[[2]]  <- spline_reparam[[1]]$S[[2]]
-	s_reparam[[3]]  <- spline_reparam[[1]]$S[[3]]
-
-	### Reparameterize both using the QR decomposition following Wood 
-	### Where Z is the Q matrix without the first column, used to reparameterize
-	C <- rep(1, nrow(X_orig)) %*% X_orig
-	qrc <- qr(t(C))
-	Z <- qr.Q(qrc,complete=TRUE)[,(nrow(C)+1):ncol(C)]
-
-	### Calculate reparameterized matrices for basis and penalty
-	X_reparam <- X_orig%*%Z
+	### Extract basis dimensions
+	basis_dim_mean <- c(dim(X_mean_jdate)[2], dim(X_mean_year)[2], dim(X_mean_tensor)[2])
+	basis_dim_disp <- c(dim(X_disp_jdate)[2], dim(X_disp_year)[2], dim(X_disp_tensor)[2])
+	basis_dim_theta <- c(dim(X_theta_jdate)[2], dim(X_theta_year)[2], dim(X_theta_tensor)[2])
+	
 
 	### Create the output and return
-	output_list <- list(x_orig = X_orig, x_reparam = X_reparam, z = Z, s_reparam = s_reparam, c = C, qrc = qrc)
+	output_list <- list(
+		x_mean = list(jdate = X_mean_jdate, year = X_mean_year, year_double = X_mean_year_double, tensor_jdate = X_mean_tensor_jdate , tensor_year = X_mean_tensor_year ),
+		x_disp = list(jdate = X_disp_jdate, year = X_disp_year, year_double = X_disp_year_double, tensor_jdate = X_disp_tensor_jdate , tensor_year = X_disp_tensor_year ),
+		x_theta = list(jdate = X_theta_jdate, year = X_theta_year, year_double = X_theta_year_double, tensor_jdate = X_theta_tensor_jdate , tensor_year = X_theta_tensor_year ),
+		s_mean = list(jdate = s_mean_jdate, year = s_mean_year, year_double = s_mean_year_double, tensor_jdate = s_mean_tensor_jdate , tensor_year =s_mean_tensor_year ),
+		s_disp = list(jdate = s_disp_jdate, year = s_disp_year, year_double = s_disp_year_double, tensor_jdate = s_disp_tensor_jdate , tensor_year =s_disp_tensor_year ),
+		s_theta = list(jdate = s_theta_jdate, year = s_theta_year, year_double = s_theta_year_double, tensor_jdate = s_theta_tensor_jdate , tensor_year =s_theta_tensor_year ),
+		s_scale = list(pos = s_scale_pos, zero = s_scale_zero),
+		basis_dim = list(mean = basis_dim_mean, disp = basis_dim_disp, theta = basis_dim_theta),
+		gamma_model = gamma_model,
+		theta_model = theta_model
+	)
+
+	### Return the object
 	return(output_list)
+
 }
 
