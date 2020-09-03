@@ -15,20 +15,20 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 	type <- basis$type
 
 	### Extract the spline coefficients and intercept for mean
-	b_mean <- extract(model_fit, "b_mean")$b_mean
-	b_0_mean <- extract(model_fit, "b_0_mean")$b_0_mean
+	b_shape <- extract(model_fit, "b_shape")$b_shape
+	b_0_shape <- extract(model_fit, "b_0_shape")$b_0_shape
 	### Convert to original basis
-	b_mean_orig <- t(apply(b_mean, 1, function(x){basis$z %*% x}))
+	b_shape_orig <- t(apply(b_shape, 1, function(x){basis$z %*% x}))
 	### Combine the intercept and spline coefficients into a single matrix
-	b_full_mean <- cbind(matrix(b_0_mean, dim(b_mean_orig)[1], 1), b_mean_orig)
+	b_full_shape <- cbind(matrix(b_0_shape, dim(b_shape_orig)[1], 1), b_shape_orig)
 
 	### Extract the spline coefficients and intercept for scale
-	b_scale <- extract(model_fit, "b_scale")$b_scale
-	b_0_scale <- extract(model_fit, "b_0_scale")$b_0_scale
+	b_rate <- extract(model_fit, "b_rate")$b_rate
+	b_0_rate <- extract(model_fit, "b_0_rate")$b_0_rate
 	### Convert to original basis
-	b_scale_orig <- t(apply(b_scale, 1, function(x){basis$z %*% x}))
+	b_rate_orig <- t(apply(b_rate, 1, function(x){basis$z %*% x}))
 	### Combine the intercept and spline coefficients into a single matrix
-	b_full_scale <- cbind(matrix(b_0_scale, dim(b_scale_orig)[1], 1), b_scale_orig)
+	b_full_rate <- cbind(matrix(b_0_rate, dim(b_rate_orig)[1], 1), b_rate_orig)
 
 	### Extract theta
 	b_theta <- extract(model_fit, "b_theta")$b_theta
@@ -45,49 +45,51 @@ extract_params <- function(model_fit, basis, newdata = NULL){
 			mutate(data = "original") 
 	} else {
 		newdata <- newdata %>%
-			mutate(data = "newdata") %>%
-			bind_rows(mutate(basis$data, data = "original"))
+			mutate(data = "newdata") 
 
 		basis_newdata <- create_basis(data = newdata, type = basis$type, knot_loc = basis$knot_loc)
 		x_orig <- cbind(1, basis_newdata$x_orig)
-
-		newdata_test <- newdata$data == "newdata"
-
-		x_orig <- x_orig[newdata_test, ]
-		newdata <- newdata[newdata_test,]
 	}
 
 	### Calculate the estimate of mean and scale for the demo basis
-	b_mean_est <- x_orig %*% t(b_full_mean)
-	b_scale_est <- x_orig %*% t(b_full_scale)
+	b_shape_est <- x_orig %*% t(b_full_shape)
+	b_rate_est <- x_orig %*% t(b_full_rate)
 	b_theta_est <- x_orig %*% t(b_full_theta)
 
+	b_shape_est <- exp(b_shape_est)
+	b_rate_est <- exp(b_rate_est)
+	b_theta_est <- exp(b_theta_est)
+
+
 	if (type == "cyclic"){
-		mean_est <- data.frame(select(newdata, "jdate", "year"), b_mean_est) %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="mean") 
-		scale_est <- data.frame(select(newdata, "jdate", "year"), b_scale_est)  %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="scale") 
+		shape_est <- data.frame(select(newdata, "jdate", "year"), b_shape_est) %>%
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="shape") 
+		rate_est <- data.frame(select(newdata, "jdate", "year"), b_rate_est)  %>%
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="rate") 
 		theta_est <- data.frame(select(newdata, "jdate", "year"), b_theta_est) %>%
 			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="theta_logodds") 
 	} else {
 	### Gather the results into a long dataframe
-		mean_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_mean_est) %>%
-			#select("jdate", "year", "mean") %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="mean") 
-		scale_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_scale_est)  %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="scale") 
+		shape_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_shape_est) %>%
+		#	select("jdate", "year", "shape") %>%
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="shape") 
+		rate_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_rate_est)  %>%
+			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="rate") 
 	}
 
 	### Add in the derived parameters
-	param_est <- full_join(mean_est, scale_est) %>%
+	param_est <- full_join(shape_est, rate_est) %>%
 		full_join(theta_est) %>%
-		mutate(rate = 1/scale) %>%
-		mutate(shape = mean * rate) %>%
+		mutate(scale = 1/rate) %>%
+		mutate(mean = shape * scale) %>%
 		mutate(disp = 1/shape) %>%
 		mutate(theta = exp(theta_logodds)/(1+exp(theta_logodds)))
 
-	return(list(param_est = param_est, b_mean = b_full_mean, b_scale = b_full_scale,  b_theta = b_full_theta))
+	return(list(param_est = param_est, b_shape = b_full_shape, b_rate = b_full_rate,  b_theta = b_full_theta))
 }
+
+
+
 
 
 

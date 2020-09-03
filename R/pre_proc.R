@@ -13,7 +13,11 @@ pre_proc <- function(basis){
 	if (basis$type == "cyclic"){
 		preproc_output <- prior_cyclic(data = basis$data, knot_loc = basis$knot_loc)
 	} else if (basis$type == "tensor"){
-		preproc_output <- prior_tensor(data = basis$data, knot_loc = basis$knot_loc)
+		
+		cyclic_output <- prior_cyclic(data = basis$data, knot_loc = list(jdate = basis$knot_loc$jdate))
+
+
+		preproc_output <- prior_tensor_fromcyclic(basis = basis, cyclic_output=cyclic_output)
 	}
 
 	output_list <- append(basis, preproc_output)
@@ -126,6 +130,98 @@ prior_cyclic <- function(data, knot_loc ){
 }
 
 
+
+
+
+#' Estimate priors for tensor spline
+#'
+#' This is where you describe the function itself
+#' contains the rownames and the subsequent columns are the sample identifiers.
+#' Any rows with duplicated row names will be dropped with the first one being
+#'
+#' @param data Dataframe with the underlying data. Columns must include variable names
+#' @param spline_type List of spline types. Either cc or cr are accepted. Names must agree with knot_loc
+#' @param knot_loc List of knot locations
+#' @return A matrix of the infile
+#' @import dplyr
+#' @export
+prior_tensor_fromcyclic <- function(basis = basis, cyclic_output=cyclic_output){
+	### Extract the number of knots
+	knot_loc <- basis$knot_loc
+	n_knots <- sapply(knot_loc, FUN = length)
+	
+	### Add a year column if it doesn't exist
+	### It should, but just in case
+	data <- basis$data
+	if(!("year" %in% colnames(data))) {
+		data <- data %>%
+			mutate(year = lubridate::year(date))		
+	}
+
+	### Remove any leap days for fitting purposes
+	data <- data %>%
+		filter(jdate <=365)
+
+	### Add in a draw column with the unique years so this can later be joined
+	### Base number of samples from MLE off of this
+	data <- data %>% 
+		mutate(draw = as.numeric(factor(year)))
+	n_years <- max(data$draw)
+
+
+	### Create cyclic basis internally for conversion
+	cyclic_basis <- create_cyclic_basis(data = data, knot_loc = list(jdate = basis$knot_loc$jdate))
+
+	### Process the beta init
+	b_init_cyclic_shape <- cyclic_output$b_init$shape
+	b_init_cyclic_rate <- cyclic_output$b_init$rate
+	b_init_cyclic_theta <- cyclic_output$b_init$theta
+
+	### Convert to original basis
+	b_init_cyclic_shape_orig <- c(t(cyclic_basis$z %*% b_init_cyclic_shape ))
+	b_init_cyclic_rate_orig <- c(t(cyclic_basis$z %*% b_init_cyclic_rate ))
+	b_init_cyclic_theta_orig <- c(t(cyclic_basis$z %*% b_init_cyclic_theta ))
+
+	### Repeat to create identical init values through time
+	b_init_shape_orig <-  rep(b_init_cyclic_shape_orig, each = length(knot_loc$year))
+	b_init_rate_orig <-  rep(b_init_cyclic_rate_orig, each = length(knot_loc$year))
+	b_init_theta_orig <-  rep(b_init_cyclic_theta_orig, each = length(knot_loc$year))
+
+	### Convert to reparameterized basis 
+	b_shape_init <- c(t( ginv(basis$z) %*% b_init_shape_orig))
+	b_rate_init <- c(t(ginv(basis$z) %*% b_init_rate_orig))
+	b_theta_init <- c(t(ginv(basis$z) %*% b_init_theta_orig))
+
+	### Estimate rho init and priors
+	rho_init_shape <- c(cyclic_output$rho_init$shape, 10)
+	rho_init_rate <- c(cyclic_output$rho_init$rate, 10)
+	rho_init_theta <- c(cyclic_output$rho_init$theta, 10)
+
+	rho_shape_prior <- c(rho_init_shape[1]-3, rho_init_shape[1] + 3, 0,  12)
+	rho_rate_prior <- c(rho_init_rate[1]-3, rho_init_rate[1] + 3, 0,  12)
+	rho_theta_prior <- c(rho_init_theta[1]-3, rho_init_theta[1] + 3, 0,  12)
+
+	### Convert to lambda
+	lambda_shape_init <- exp(rho_init_shape)
+	lambda_rate_init <- exp(rho_init_rate)
+	lambda_theta_init <- exp(rho_init_theta)
+
+	### Create output list and return
+	output_list <- list(
+		b_0 = cyclic_output$b_0, 
+		b_init = list(shape = b_shape_init, rate = b_rate_init, theta = b_theta_init), 
+		lambda_init = list(shape = lambda_shape_init, rate = lambda_rate_init, theta = lambda_theta_init), 
+		rho_init = list(shape = rho_init_shape, rate = rho_init_rate, theta = rho_init_theta),
+		rho_prior = list(shape = rho_shape_prior, rate = rho_rate_prior, theta = rho_theta_prior)
+	)
+
+	return(output_list)
+}
+
+
+
+
+
 #' Estimate priors for tensor spline
 #'
 #' This is where you describe the function itself
@@ -205,37 +301,42 @@ prior_tensor <- function(data, knot_loc ){
 #		select(-period)
 
 	data <- data %>%
-		inner_join(mle_fit$draws, by = c("jdate", "draw"))
+		select(date, jdate, year) %>%
+		inner_join(mle_fit$draws, by = c("jdate"))
 	
 	### Fit a tensor product spline model using mgcv
-	mean_model <- mgcv::gam(mean ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE)
-	scale_model <- mgcv::gam(scale ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE)
+	shape_model <- mgcv::gam(log(shape) ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE)
+	rate_model <- mgcv::gam(log(rate) ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE)
+	theta_model <- mgcv::gam(zero ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE,family=binomial)
+
 
 	### Create the prior for the mean intercept
-	b_0_mean_prior <- c(summary(mean_model)$p.table[1], summary(mean_model)$p.table[2])
-	b_0_scale_prior <- c(summary(scale_model)$p.table[1], summary(scale_model)$p.table[2])
+	b_0_shape_prior <- c(summary(shape_model)$p.table[1], summary(shape_model)$p.table[2])
+	b_0_rate_prior <- c(summary(rate_model)$p.table[1], summary(rate_model)$p.table[2])
+	b_0_theta_prior <- c(summary(theta_model)$p.table[1], summary(theta_model)$p.table[2])
 
 	### Create a vector for intializing the mean
-	b_mean_init <- c(coef(mean_model)[2:length(coef(mean_model))])
-	b_scale_init <- c(coef(scale_model)[2:length(coef(scale_model))])
+	b_shape_init <- c(coef(shape_model)[2:length(coef(shape_model))])
+	b_rate_init <- c(coef(rate_model)[2:length(coef(rate_model))])
+	b_theta_init <- c(coef(theta_model)[2:length(coef(theta_model))])
 
 	### Extract smoothing penalty
-	lambda_mean_init <- unname(c(mean_model$sp ))
-	lambda_scale_init <- unname(c(scale_model$sp))
+	lambda_shape_init <- unname(c(shape_model$sp ))
+	lambda_rate_init <- unname(c(rate_model$sp))
+	lambda_theta_init <- unname(c(theta_model$sp))
 
 	### Calculate alpha the rescaling factor and then rescale
-	mean_alpha <- sapply(mean_model$smooth, "[[", "S.scale") / lambda_mean_init
-	lambda_mean_init <- c(lambda_mean_init / mean_alpha)
+	shape_alpha <- sapply(shape_model$smooth, "[[", "S.scale") / lambda_shape_init
+	lambda_shape_init <- c(lambda_shape_init / shape_alpha)
 
-	scale_alpha <- sapply(scale_model$smooth, "[[", "S.scale") / lambda_scale_init
-	lambda_scale_init <- c(lambda_scale_init / scale_alpha)
+	rate_alpha <- sapply(rate_model$smooth, "[[", "S.scale") / lambda_rate_init
+	lambda_rate_init <- c(lambda_rate_init / rate_alpha)
 
-	### Lambda
-	lambda_mean_prior <- c(0.05, 0.05/lambda_mean_init[1], 0.05,  0.05/lambda_mean_init[2])
-	lambda_scale_prior <- c(0.05, 0.05/lambda_scale_init[1], 0.05,  0.05/lambda_scale_init[2])
+	theta_alpha <- sapply(theta_model$smooth, "[[", "S.scale") / lambda_theta_init
+	lambda_theta_init <- c(lambda_theta_init / theta_alpha)
 
 	### Extract penalty matrix
-	s_matrix <- sapply(mean_model$smooth, "[[", "S")
+	s_matrix <- sapply(shape_model$smooth, "[[", "S")
 
 	s_mat_1 <- s_matrix[[1]]
 	s_mat_2 <- s_matrix[[2]]
@@ -259,8 +360,23 @@ prior_tensor <- function(data, knot_loc ){
 	#lines(mean_samples[4,7:13], col="blue")
 	#lines(mean_samples[5,7:13], col="blue")
 
+	rho_init_shape <- log(lambda_shape_init)
+	rho_init_rate <- log(lambda_rate_init)
+	rho_init_theta <- log(lambda_theta_init)
+
+	rho_shape_prior <- c(rho_init_shape-3, rho_init_shape + 3)
+	rho_rate_prior <- c(rho_init_rate-3, rho_init_rate + 3)
+	rho_theta_prior <- c(rho_init_theta-3, rho_init_theta + 3)
+
 	### Create output list and return
-	output_list <- list(b_0 = list(mean = b_0_mean_prior, scale = b_0_scale_prior), b_init = list(mean = b_mean_init, scale = b_scale_init), lambda_prior = list(mean = lambda_mean_prior, scale = lambda_scale_prior), lambda_init = list(mean = lambda_mean_init, scale = lambda_scale_init))
+	output_list <- list(
+		b_0 = list(shape = b_0_shape_prior, rate = b_0_rate_prior,  theta = b_0_theta_prior), 
+		b_init = list(shape = b_shape_init, rate = b_rate_init, theta = b_theta_init), 
+		lambda_init = list(shape = lambda_shape_init, rate = lambda_rate_init, theta = lambda_theta_init), 
+		rho_init = list(shape = rho_init_shape, rate = rho_init_rate, theta = rho_init_theta),
+		rho_prior = list(shape = rho_shape_prior, rate = rho_rate_prior, theta = rho_theta_prior)
+	)
+
 	return(output_list)
 
 }

@@ -80,9 +80,7 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 		b_0_theta = spi_input$b_0$theta[1], 
 		b_shape = spi_input$b_init$shape, 
 		b_rate = spi_input$b_init$rate, 
-		b_theta = spi_input$b_init$theta, 
-		lambda_shape_first = spi_input$lambda_init$shape[1], 
-		lambda_rate_first = spi_input$lambda_init$rate[1]
+		b_theta = spi_input$b_init$theta
 	))
 
 	if (spi_input$type == "cyclic"){
@@ -99,16 +97,25 @@ spi_fit<- function(spi_input, n_chains=1, iter=1000, cores = 1, lambda_year = "f
 		init_vals[[1]]$b_theta <- c(p_inv %*% init_vals[[1]]$b_theta)
 	}
 
-
 	if (spi_input$type == "tensor"){
-		init_vals[[1]]$lambda_mean_first <- spi_input$lambda_init$mean[1]
-		init_vals[[1]]$lambda_scale_first <-  spi_input$lambda_init$scale[1]
+		init_vals[[1]]$rho_shape <- spi_input$rho_init$shape
+		init_vals[[1]]$rho_rate <-  spi_input$rho_init$rate
+		init_vals[[1]]$rho_theta <-  spi_input$rho_init$theta
 	}
 
-	if (spi_input$type == "tensor" & lambda_year == "free"){
-		init_vals[[1]]$lambda_mean_second <- spi_input$lambda_init$mean[2]
-		init_vals[[1]]$lambda_scale_second <- spi_input$lambda_init$scale[2]
-	}
+
+### Come back here
+#	if (spi_input$type == "tensor"){
+#		init_vals[[1]]$rho_shape[1] <- spi_input$rho_init$shapemean[1]
+#		init_vals[[1]]$rho_shape[1] <- spi_input$lambda_init$mean[1]
+
+#		init_vals[[1]]$lambda_scale_first <-  spi_input$lambda_init$scale[1]
+#	}
+
+#	if (spi_input$type == "tensor" & lambda_year == "free"){
+#		init_vals[[1]]$lambda_mean_second <- spi_input$lambda_init$mean[2]
+#		init_vals[[1]]$lambda_scale_second <- spi_input$lambda_init$scale[2]
+#	}
 
 	### Loop through the initial values if we have more than one chain
 	### Vary lambda values 2 orders of magnitude smaller or larger
@@ -198,7 +205,7 @@ spi_tensor <- function(data, init_vals, n_chains, iter, cores,  lambda_year){
 	### Fit the model
 	model_fit <- rstan::stan(model_code = tensor_model, 
 		data = data, 
-	#	init = init_vals,
+		#init = init_vals,
 		iter = iter, 
 		chains = n_chains,
 		cores = cores, 
