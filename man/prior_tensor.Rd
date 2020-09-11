@@ -4,7 +4,7 @@
 \alias{prior_tensor}
 \title{Estimate priors for tensor spline}
 \usage{
-prior_tensor(data, knot_loc)
+prior_tensor(data, knot_loc, lambda_shape, year_pen_ratio)
 }
 \arguments{
 \item{data}{Dataframe with the underlying data. Columns must include variable names}

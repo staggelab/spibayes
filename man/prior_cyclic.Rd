@@ -4,7 +4,7 @@
 \alias{prior_cyclic}
 \title{Estimate priors for cyclic spline}
 \usage{
-prior_cyclic(data, knot_loc)
+prior_cyclic(data, knot_loc, lambda_shape)
 }
 \arguments{
 \item{data}{Dataframe with the underlying data. Columns must include variable names}

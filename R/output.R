@@ -10,147 +10,166 @@
 #' @param knot_loc List of knot locations
 #' @return A matrix of the infile
 #' @export
-extract_params <- function(model_fit, basis, newdata = NULL){
-	### Extract type
-	type <- basis$type
+predict_vals <- function(model_fit, newdata = NULL){
 
-	### Extract the spline coefficients and intercept for mean
-	b_shape <- extract(model_fit, "b_shape")$b_shape
-	b_0_shape <- extract(model_fit, "b_0_shape")$b_0_shape
-	### Convert to original basis
-	b_shape_orig <- t(apply(b_shape, 1, function(x){basis$z %*% x}))
-	### Combine the intercept and spline coefficients into a single matrix
-	b_full_shape <- cbind(matrix(b_0_shape, dim(b_shape_orig)[1], 1), b_shape_orig)
-
-	### Extract the spline coefficients and intercept for scale
-	b_rate <- extract(model_fit, "b_rate")$b_rate
-	b_0_rate <- extract(model_fit, "b_0_rate")$b_0_rate
-	### Convert to original basis
-	b_rate_orig <- t(apply(b_rate, 1, function(x){basis$z %*% x}))
-	### Combine the intercept and spline coefficients into a single matrix
-	b_full_rate <- cbind(matrix(b_0_rate, dim(b_rate_orig)[1], 1), b_rate_orig)
-
-	### Extract theta
-	b_theta <- extract(model_fit, "b_theta")$b_theta
-	b_0_theta <- extract(model_fit, "b_0_theta")$b_0_theta
-	### Convert to original basis
-	b_theta_orig <- t(apply(b_theta, 1, function(x){basis$z %*% x}))
-	### Combine the intercept and spline coefficients into a single matrix
-	b_full_theta <- cbind(matrix(b_0_theta, dim(b_theta_orig)[1], 1), b_theta_orig)
-
-	### If new data isn't provided, assume it is the data used to fit the model
-	if(is.null(newdata)){
-		x_orig <- cbind(1, basis$x_orig)
-		newdata <- basis$data%>%
-			mutate(data = "original") 
+	if (is.null(newdata)){
+		newdata_pos <- model_fit$input$data_pos
+		newdata_all <- model_fit$input$data_all
 	} else {
-		newdata <- newdata %>%
-			mutate(data = "newdata") 
-
-		basis_newdata <- create_basis(data = newdata, type = basis$type, knot_loc = basis$knot_loc)
-		x_orig <- cbind(1, basis_newdata$x_orig)
+		newdata_pos <- newdata
+		newdata_all <- newdata
 	}
 
-	### Calculate the estimate of mean and scale for the demo basis
-	b_shape_est <- x_orig %*% t(b_full_shape)
-	b_rate_est <- x_orig %*% t(b_full_rate)
-	b_theta_est <- x_orig %*% t(b_full_theta)
+	### Whether cyclic or tensor
+	if(model_fit$input$type == "cyclic") {
 
-	b_shape_est <- exp(b_shape_est)
-	b_rate_est <- exp(b_rate_est)
-	b_theta_est <- exp(b_theta_est)
+		var_list <- c("b_0_mean", "b_0_disp", "b_0_theta", "b_mean_jdate", "b_disp_jdate", "b_theta_jdate", "lambda_mean", "lambda_disp", "lambda_theta")
+
+	x_mean <- cbind(1, 
+		PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_pos)
+		)
+	x_disp <- cbind(1, 
+		PredictMat(model_fit$input$model$gamma$smooth[[4]],newdata_pos)
+	)
+
+	x_theta <- cbind(1, 
+		PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_all)
+	)
+
+	} else if (model_fit$input$type == "tensor") {
+
+		var_list <- c("b_0_mean", "b_0_disp", "b_0_theta", "b_mean_jdate", "b_mean_year", "b_mean_tensor", "b_disp_jdate", "b_disp_year", "b_disp_tensor","b_theta_jdate", "b_theta_year", "b_theta_tensor", "lambda_mean", "lambda_disp", "lambda_theta")
+
+	x_mean <- cbind(1, 
+		PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_pos),
+		PredictMat(model_fit$input$model$gamma$smooth[[2]],newdata_pos),
+		PredictMat(model_fit$input$model$gamma$smooth[[3]],newdata_pos)
+		)
+	x_disp <- cbind(1, 
+		PredictMat(model_fit$input$model$gamma$smooth[[4]],newdata_pos),
+		PredictMat(model_fit$input$model$gamma$smooth[[5]],newdata_pos),
+		PredictMat(model_fit$input$model$gamma$smooth[[6]],newdata_pos)
+	)
+
+	x_theta <- cbind(1, 
+		PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_all),
+		PredictMat(model_fit$input$model$theta$smooth[[2]],newdata_all),
+		PredictMat(model_fit$input$model$theta$smooth[[3]],newdata_all)
+	)
 
 
-	if (type == "cyclic"){
-		shape_est <- data.frame(select(newdata, "jdate", "year"), b_shape_est) %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="shape") 
-		rate_est <- data.frame(select(newdata, "jdate", "year"), b_rate_est)  %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="rate") 
-		theta_est <- data.frame(select(newdata, "jdate", "year"), b_theta_est) %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="theta_logodds") 
-	} else {
-	### Gather the results into a long dataframe
-		shape_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_shape_est) %>%
-		#	select("jdate", "year", "shape") %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="shape") 
-		rate_est <- data.frame(select(newdata, -"data", -"date", -"precip"), b_rate_est)  %>%
-			pivot_longer(cols=c(-jdate, -contains("year")),  names_to = "draw", values_to="rate") 
 	}
 
-	### Add in the derived parameters
-	param_est <- full_join(shape_est, rate_est) %>%
-		full_join(theta_est) %>%
-		mutate(scale = 1/rate) %>%
-		mutate(mean = shape * scale) %>%
+	### Separate by type of model first
+	if(model_fit$fit_params$engine == "optimize") {
+		model_read <- cmdstanr::read_cmdstan_csv(model_fit$model_fit$output_files(), variables = var_list)
+
+		param_est <- as.data.frame(model_read$point_estimates)
+
+		b_0_mean <- param_est %>% select(starts_with("b_0_mean"))
+		b_mean <- param_est %>% select(starts_with("b_mean_"))
+		b_mean <- as.matrix(cbind(b_0_mean, b_mean))
+		mean_est <- x_mean %*% t(b_mean)
+		mean_est <- exp(mean_est)
+
+		b_0_disp <- param_est %>% select(starts_with("b_0_disp"))
+		b_disp <- param_est %>% select(starts_with("b_disp_"))
+		b_disp <- as.matrix(cbind(b_0_disp, b_disp))
+		disp_est <- x_disp %*% t(b_disp)
+		shape_est <- 1/ exp(-7 + log(1 + exp(disp_est)))
+
+		b_0_theta <- param_est %>% select(starts_with("b_0_theta"))
+		b_theta <- param_est %>% select(starts_with("b_theta_"))
+		b_theta <- as.matrix(cbind(b_0_theta, b_theta))
+		theta_est <- x_theta %*% t(b_theta)
+		theta_est <- exp(theta_est)/(1+ exp(theta_est))
+	} else if (model_fit$fit_params$engine == "variational") {
+	
+	
+	} else if (model_fit$fit_params$engine == "sample") {
+	
+
+	}
+
+
+	if (is.null(newdata)){
+	param_gamma <- newdata_pos %>%
+		mutate(mean = c(mean_est)) %>%
+		mutate(shape = c(shape_est)) %>%
 		mutate(disp = 1/shape) %>%
-		mutate(theta = exp(theta_logodds)/(1+exp(theta_logodds)))
+		mutate(scale = mean/shape) %>%
+		mutate(rate = 1/scale)
 
-	return(list(param_est = param_est, b_shape = b_full_shape, b_rate = b_full_rate,  b_theta = b_full_theta))
-}
+	param_theta <- newdata_all %>%
+		mutate(theta = c(theta_est)) 
 
+	output_list <- list(gamma = param_gamma, theta = param_theta)
+	} else {
+	param_output <- newdata_all %>%
+		mutate(mean = c(mean_est)) %>%
+		mutate(shape = c(shape_est)) %>%
+		mutate(disp = 1/shape) %>%
+		mutate(scale = mean/shape) %>%
+		mutate(rate = 1/scale) %>%
+		mutate(theta = c(theta_est) )
 
-
-
-
-
-
-#' Convert parameter estimate to long format
-#'
-#' This is where you describe the function itself
-#' contains the rownames and the subsequent columns are the sample identifiers.
-#' Any rows with duplicated row names will be dropped with the first one being
-#'
-#' @param data Dataframe with the underlying data. Columns must include variable names
-#' @param spline_type List of spline types. Either cc or cr are accepted. Names must agree with knot_loc
-#' @param knot_loc List of knot locations
-#' @return A matrix of the infile
-#' @export
-param_long <- function(param_est){
-	### Convert to long format to plot all together
-	param_est_long <- param_est %>%
-		pivot_longer(cols=c(-jdate, -contains("year"), -draw), names_to = "param", values_to="value") 	
-
-	return(param_est_long)
-}
-
-
-
-#' Convert parameter estimate to long format
-#'
-#' This is where you describe the function itself
-#' contains the rownames and the subsequent columns are the sample identifiers.
-#' Any rows with duplicated row names will be dropped with the first one being
-#'
-#' @param data Dataframe with the underlying data. Columns must include variable names
-#' @param spline_type List of spline types. Either cc or cr are accepted. Names must agree with knot_loc
-#' @param knot_loc List of knot locations
-#' @return A matrix of the infile
-#' @export
-param_summary <- function(param_est){
-	### Convert to long format
-	param_est_long <- param_long(param_est)
-
-	### Group by parameter and time
-	param_est_summary <- param_est_long %>%
-		group_by(param, jdate)
-
-	### For tensor product add a group on year
-	if("year" %in% names(param_est_long)) {
-		param_est_summary <- param_est_summary %>%
-			group_by(year, add=TRUE)
+	output_list = param_output
 	}
 
- 	### Calculate summary statistics
-	param_est_summary <- param_est_summary %>%	
-		summarise(median = median(value), 
-			mean = mean(value, na.rm=TRUE),
-			sd = sd(value, na.rm=TRUE),
-			perc_95_lower = quantile(value, 0.025), 
-			perc_95_upper = quantile(value, 0.975), 
-			perc_50_lower = quantile(value, 0.25), 
-			perc_50_upper = quantile(value, 0.75)) %>%
-		ungroup()
 
-	return(param_est_summary)
+	return(output_list)
+
 }
+	
+
+
+
+
+
+
+
+#' Extract model output parameters
+#'
+#' This is where you describe the function itself
+#' contains the rownames and the subsequent columns are the sample identifiers.
+#' Any rows with duplicated row names will be dropped with the first one being
+#'
+#' @param data Dataframe with the underlying data. Columns must include variable names
+#' @param spline_type List of spline types. Either cc or cr are accepted. Names must agree with knot_loc
+#' @param knot_loc List of knot locations
+#' @return A matrix of the infile
+#' @export
+extract_params <- function(model_fit, var_list = NULL){
+
+	### Whether cyclic or tensor
+	if(model_fit$input$type == "cyclic" & is.null(var_list) ) {
+
+		var_list <- c("b_0_mean", "b_0_disp", "b_0_theta", "b_mean_jdate", "b_disp_jdate", "b_theta_jdate", "lambda_mean", "lambda_disp", "lambda_theta")
+
+	} else if (model_fit$input$type == "tensor" & is.null(var_list)) {
+
+		var_list <- c("b_0_mean", "b_0_disp", "b_0_theta", "b_mean_jdate", "b_mean_year", "b_mean_tensor", "b_disp_jdate", "b_disp_year", "b_disp_tensor","b_theta_jdate", "b_theta_year", "b_theta_tensor", "lambda_mean", "lambda_disp", "lambda_theta")
+
+	} else {
+		var_list <- var_list
+	}
+
+	### Separate by type of model first
+	if(model_fit$fit_params$engine == "optimize") {
+		model_read <- cmdstanr::read_cmdstan_csv(model_fit$model_fit$output_files(), variables = var_list)
+
+		param_est <- as.data.frame(model_read$point_estimates)
+
+	} else if (model_fit$fit_params$engine == "variational") {
+	
+	
+	} else if (model_fit$fit_params$engine == "sample") {
+	
+
+	}
+
+	return(param_est)
+
+}
+	
 

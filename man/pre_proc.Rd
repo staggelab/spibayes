@@ -4,14 +4,20 @@
 \alias{pre_proc}
 \title{Create Spline Basis}
 \usage{
-pre_proc(basis)
+pre_proc(
+  data,
+  type,
+  knot_loc,
+  lambda_shape = c(500, 5000, 0.5, 5000, 5000),
+  year_pen_ratio = 100
+)
 }
 \arguments{
 \item{data}{Dataframe with the underlying data. Columns must include variable names}
 
-\item{spline_type}{List of spline types. Either cc or cr are accepted. Names must agree with knot_loc}
-
 \item{knot_loc}{List of knot locations}
+
+\item{spline_type}{List of spline types. Either cc or cr are accepted. Names must agree with knot_loc}
 }
 \value{
 A matrix of the infile

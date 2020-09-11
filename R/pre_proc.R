@@ -9,19 +9,34 @@
 #' @param knot_loc List of knot locations
 #' @return A matrix of the infile
 #' @export
-pre_proc <- function(basis){
-	if (basis$type == "cyclic"){
-		preproc_output <- prior_cyclic(data = basis$data, knot_loc = basis$knot_loc)
-	} else if (basis$type == "tensor"){
-		
-		cyclic_output <- prior_cyclic(data = basis$data, knot_loc = list(jdate = basis$knot_loc$jdate))
+pre_proc <- function(data, type, knot_loc, lambda_shape = c(500, 5000, 0.5, 5000, 5000), year_pen_ratio = 100){
 
-
-		preproc_output <- prior_tensor_fromcyclic(basis = basis, cyclic_output=cyclic_output)
+	### Catch - if there is no precip column
+	if(!("precip" %in% colnames(data))){
+ 		stop('There must be a column titled precip (lowercase)')
 	}
 
-	output_list <- append(basis, preproc_output)
-	return(output_list)
+	### Create a column for zero precip
+	data <- data %>%
+		mutate(zero = precip == 0)
+
+	### Remove any leap days for fitting purposes
+	data <- data %>%
+		filter(jdate <=365)
+
+	if (type == "cyclic"){
+		preproc_output <- prior_cyclic(data = data, knot_loc = knot_loc, lambda_shape = lambda_shape[1])
+	} else if (type == "tensor"){
+		preproc_output <- prior_tensor(data = data, knot_loc = knot_loc, lambda_shape = lambda_shape, year_pen_ratio = year_pen_ratio)
+	}
+
+	### Create the output and return
+	preproc_output$data_all <- data
+	preproc_output$data_pos <- data %>% filter(precip > 0)
+	preproc_output$type <- type
+	preproc_output$knot_loc <- knot_loc
+
+	return(preproc_output)
 }
 
 #' Estimate priors for cyclic spline
@@ -36,186 +51,138 @@ pre_proc <- function(basis){
 #' @return A matrix of the infile
 #' @import dplyr
 #' @export
-prior_cyclic <- function(data, knot_loc ){
+prior_cyclic <- function(data, knot_loc, lambda_shape ){
 	### Extract the number of knots
 	n_knots <- sapply(knot_loc, FUN = length)
 	
+	### Extract positive precipitation and assign all data
+	data_pos <- data %>%
+		filter(precip > 0)
+	data_all <- data
+
 	### How many years of data to sample from MLE estimate
-	if("year" %in% colnames(data)) {
-		n_years <- length(unique(data$year))
+	if("year" %in% colnames(data_all)) {
+		n_years <- length(unique(data_all$year))
 	} else {
-		n_years <- length(unique(lubridate::year(data$date)))
+		n_years <- length(unique(lubridate::year(data_all$date)))
 	}
 
-	### Create MLE estimate
-	### Fit each day with MLE
-	mle_fit <- mle_gamma_fit(jdate = data$jdate, values = data$precip, n = n_years)
+	### Fit a cyclic spline model for gamma distributed precip
+	gamma_model <- gam(list(precip 
+		~ ti(jdate, bs=c("cc"), k = n_knots[1]),
+		~ ti(jdate, bs=c("cc"), k = n_knots[1])),
+		data = data_pos, 
+		family=gammals(link=list("identity","log")),
+		fit = TRUE, 
+		select = TRUE)
+
+	### Fit a cyclic spline model using mgcv for zeros
+	theta_model <- mgcv::gam(zero ~ ti(jdate, bs=c("cc"), k = c(n_knots[1])), 
+		data=data_all, 
+		family=binomial,
+		fit = TRUE,
+		select=TRUE)
+
+	### Extract basis matrix for mean and dispersion
+	X_mean_jdate <- PredictMat(gamma_model$smooth[[1]], data_pos)
+	X_disp_jdate <- PredictMat(gamma_model$smooth[[2]], data_pos)
+
+	### Extract basis matrix For zeros
+	X_theta_jdate <- PredictMat(gamma_model$smooth[[1]], data)
+
+	### Extract S Penalty matrices for mean and dispersion
+	s_mean_jdate <- gamma_model$smooth[[1]]$S[[1]]
+	s_disp_jdate <- gamma_model$smooth[[2]]$S[[1]]
+
+	### Extract S Penalty matrices for zero precip
+	s_theta_jdate <- theta_model$smooth[[1]]$S[[1]]
+
+	### Extract S scaling function
+	s_scale_pos <- sapply(gamma_model$smooth, function(x){x$S.scale})
+	s_scale_zero <- sapply(gamma_model$smooth, function(x){x$S.scale})
 	
-
-	#mle_fit <- data %>%
-	#	dplyr::group_by(jdate) %>%
-	#	dplyr::filter(precip > 0) %>%
-	#	dplyr::summarise(shape = fitdistrplus::fitdist(precip, "gamma")[[1]][[1]], rate = fitdistrplus::fitdist(precip, "gamma")[[1]][[2]]) %>%
-	#	dplyr::mutate(scale = 1/rate) %>%
-	#	dplyr::mutate(mean = scale * shape) %>%
-	#	dplyr::mutate(disp = 1/shape) %>%
-	#	dplyr::ungroup()
-
-	### Fit a cyclic spline model using mgcv
-	shape_model <- mgcv::gam(log(shape) ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
-	rate_model <- mgcv::gam(log(rate) ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=mle_fit$draws, knots = knot_loc, select=FALSE)
-	theta_model <- mgcv::gam(zero ~ s(jdate, bs=c("cc"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE,family=binomial)
-
-	### Create the prior for the mean intercept
-	b_0_shape_prior <- c(summary(shape_model)$p.table[1], summary(shape_model)$p.table[2])
-	b_0_rate_prior <- c(summary(rate_model)$p.table[1], summary(rate_model)$p.table[2])
-	b_0_theta_prior <- c(summary(theta_model)$p.table[1], summary(theta_model)$p.table[2])
-
-	### Create a vector for intializing the mean
-	b_shape_init <- c(coef(shape_model)[2:length(coef(shape_model))])
-	b_rate_init <- c(coef(rate_model)[2:length(coef(rate_model))])
-	b_theta_init <- c(coef(theta_model)[2:length(coef(theta_model))])
-
-	### Extract smoothing penalty
-	lambda_shape_init <- unname(c(shape_model$sp ))
-	lambda_rate_init <- unname(c(rate_model$sp))
-	lambda_theta_init <- unname(c(theta_model$sp))
-
-	### Calculate alpha the rescaling factor and then rescale
-	shape_alpha <- sapply(shape_model$smooth, "[[", "S.scale") / lambda_shape_init
-	lambda_shape_init <- c(lambda_shape_init / shape_alpha)
-
-	rate_alpha <- sapply(rate_model$smooth, "[[", "S.scale") / lambda_rate_init
-	lambda_rate_init <- c(lambda_rate_init / rate_alpha)
-
-	theta_alpha <- sapply(theta_model$smooth, "[[", "S.scale") / lambda_theta_init
-	lambda_theta_init <- c(lambda_theta_init / theta_alpha)
-
-	### Extract penalty matrix
-	s_matrix <- shape_model$smooth[[1]]$S[[1]]
-	#s_inv <- MASS::ginv(s_matrix)
-
-	### Rescale to match standard devs
-	### Might not need to do this
-	#shape_samples <- mvrnorm(n=100, b_shape_init, s_inv)
-	#rate_samples <- mvrnorm(n=100, b_rate_init, s_inv)
-	#theta_samples <- mvrnorm(n=100, b_theta_init, s_inv)
-
-	#lambda_shape <- 1/((sd(b_shape_init)/mean(apply(shape_samples, 1, sd)))^2)
-	#lambda_rate <- 1/((sd(b_rate_init)/mean(apply(rate_samples, 1, sd)))^2)
-	#lambda_theta <- 1/((sd(b_theta_init)/mean(apply(theta_samples, 1, sd)))^2)
-
-	#mean_testing <- mvrnorm(n=100, b_mean_init, s_inv/lambda_mean)
-	#scale_testing <- mvrnorm(n=100, b_scale_init, s_inv/lambda_scale)	
-	#theta_testing <- mvrnorm(n=100, b_theta_init, s_inv/lambda_theta_init)
+	### Extract basis dimensions
+	basis_dim_mean <- dim(X_mean_jdate)[2]
+	basis_dim_disp <- dim(X_disp_jdate)[2]
+	basis_dim_theta <- dim(X_theta_jdate)[2]
 	
-	rho_init_shape <- log(lambda_shape_init)
-	rho_init_rate <- log(lambda_rate_init)
-	rho_init_theta <- log(lambda_theta_init)
+	### Extract model coefficients
+	coef_init_df <- data.frame(t(coef(gamma_model)))
 
-	rho_shape_prior <- c(rho_init_shape-3, rho_init_shape + 3)
-	rho_rate_prior <- c(rho_init_rate-3, rho_init_rate + 3)
-	rho_theta_prior <- c(rho_init_theta-3, rho_init_theta + 3)
+	### Process the beta intercept
+	b_0_mean_init <- unlist(select(coef_init_df,contains("Intercept"))[1])
+	b_0_disp_init <- unlist(select(coef_init_df,contains("Intercept"))[2])
+	b_0_theta_init <- unlist(coef(theta_model)[1])
 
-	### Create output list and return
-	output_list <- list(
-		b_0 = list(shape = b_0_shape_prior, rate = b_0_rate_prior,  theta = b_0_theta_prior), 
-		b_init = list(shape = b_shape_init, rate = b_rate_init, theta = b_theta_init), 
-		lambda_init = list(shape = lambda_shape_init, rate = lambda_rate_init, theta = lambda_theta_init), 
-		rho_init = list(shape = rho_init_shape, rate = rho_init_rate, theta = rho_init_theta),
-		rho_prior = list(shape = rho_shape_prior, rate = rho_rate_prior, theta = rho_theta_prior)
-	)
-	return(output_list)
-
-}
-
-
-
-
-
-#' Estimate priors for tensor spline
-#'
-#' This is where you describe the function itself
-#' contains the rownames and the subsequent columns are the sample identifiers.
-#' Any rows with duplicated row names will be dropped with the first one being
-#'
-#' @param data Dataframe with the underlying data. Columns must include variable names
-#' @param spline_type List of spline types. Either cc or cr are accepted. Names must agree with knot_loc
-#' @param knot_loc List of knot locations
-#' @return A matrix of the infile
-#' @import dplyr
-#' @export
-prior_tensor_fromcyclic <- function(basis = basis, cyclic_output=cyclic_output){
-	### Extract the number of knots
-	knot_loc <- basis$knot_loc
-	n_knots <- sapply(knot_loc, FUN = length)
-	
-	### Add a year column if it doesn't exist
-	### It should, but just in case
-	data <- basis$data
-	if(!("year" %in% colnames(data))) {
-		data <- data %>%
-			mutate(year = lubridate::year(date))		
-	}
-
-	### Remove any leap days for fitting purposes
-	data <- data %>%
-		filter(jdate <=365)
-
-	### Add in a draw column with the unique years so this can later be joined
-	### Base number of samples from MLE off of this
-	data <- data %>% 
-		mutate(draw = as.numeric(factor(year)))
-	n_years <- max(data$draw)
-
-
-	### Create cyclic basis internally for conversion
-	cyclic_basis <- create_cyclic_basis(data = data, knot_loc = list(jdate = basis$knot_loc$jdate))
+	### Calculate b_0 prior matrix
+	b_0_prior <- as.matrix(summary(gamma_model)$p.table[,1:2])
+	b_0_prior <- rbind(b_0_prior, matrix(summary(theta_model)$p.table[1:2], 1, 2))
+	colnames(b_0_prior) <- c("est", "std_dev")
+	rownames(b_0_prior) <- c("mean", "disp", "theta")
+	### Expand the range by an order of magnitude
+	b_0_prior[,2] <- b_0_prior[,2] * 10
 
 	### Process the beta init
-	b_init_cyclic_shape <- cyclic_output$b_init$shape
-	b_init_cyclic_rate <- cyclic_output$b_init$rate
-	b_init_cyclic_theta <- cyclic_output$b_init$theta
+	b_init_mean_jdate <- c(unlist(select(coef_init_df,contains("ti.jdate"))))
+	b_init_disp_jdate <- c(unlist(select(coef_init_df,contains("ti.1.jdate"))))
+	b_init_theta_jdate <- coef(theta_model)[2:length(coef(theta_model))]
 
-	### Convert to original basis
-	b_init_cyclic_shape_orig <- c(t(cyclic_basis$z %*% b_init_cyclic_shape ))
-	b_init_cyclic_rate_orig <- c(t(cyclic_basis$z %*% b_init_cyclic_rate ))
-	b_init_cyclic_theta_orig <- c(t(cyclic_basis$z %*% b_init_cyclic_theta ))
+	### Pull the estimated penalty from a jdate only model
+	lambda_mean_jdate_est <- gamma_model$sp[1]
+	lambda_disp_jdate_est <- gamma_model$sp[2]
+	lambda_theta_jdate_est <- theta_model$sp[1]
 
-	### Repeat to create identical init values through time
-	b_init_shape_orig <-  rep(b_init_cyclic_shape_orig, each = length(knot_loc$year))
-	b_init_rate_orig <-  rep(b_init_cyclic_rate_orig, each = length(knot_loc$year))
-	b_init_theta_orig <-  rep(b_init_cyclic_theta_orig, each = length(knot_loc$year))
+	### Create matrices for gamma distributed priors on lambda
+	lambda_mean_prior <- matrix(NA, 1, 2)
+	### Add the shape parameter for lambda. Tight near normal for everything except the double penalty
+	lambda_mean_prior[,1] <- lambda_shape
 
-	### Convert to reparameterized basis 
-	b_shape_init <- c(t( ginv(basis$z) %*% b_init_shape_orig))
-	b_rate_init <- c(t(ginv(basis$z) %*% b_init_rate_orig))
-	b_theta_init <- c(t(ginv(basis$z) %*% b_init_theta_orig))
+	### Replicate for other lambdas
+	lambda_disp_prior <-lambda_mean_prior
+	lambda_theta_prior <-lambda_mean_prior
 
-	### Estimate rho init and priors
-	rho_init_shape <- c(cyclic_output$rho_init$shape, 10)
-	rho_init_rate <- c(cyclic_output$rho_init$rate, 10)
-	rho_init_theta <- c(cyclic_output$rho_init$theta, 10)
-
-	rho_shape_prior <- c(rho_init_shape[1]-3, rho_init_shape[1] + 3, 0,  12)
-	rho_rate_prior <- c(rho_init_rate[1]-3, rho_init_rate[1] + 3, 0,  12)
-	rho_theta_prior <- c(rho_init_theta[1]-3, rho_init_theta[1] + 3, 0,  12)
-
-	### Convert to lambda
-	lambda_shape_init <- exp(rho_init_shape)
-	lambda_rate_init <- exp(rho_init_rate)
-	lambda_theta_init <- exp(rho_init_theta)
+	### Calculate the rate parameter
+	lambda_mean_prior[,2] <-lambda_mean_prior[,1]/lambda_mean_jdate_est
+	lambda_disp_prior[,2] <-lambda_disp_prior[,1]/lambda_disp_jdate_est
+	lambda_theta_prior[,2] <-lambda_theta_prior[,1]/lambda_theta_jdate_est
 
 	### Create output list and return
-	output_list <- list(
-		b_0 = cyclic_output$b_0, 
-		b_init = list(shape = b_shape_init, rate = b_rate_init, theta = b_theta_init), 
-		lambda_init = list(shape = lambda_shape_init, rate = lambda_rate_init, theta = lambda_theta_init), 
-		rho_init = list(shape = rho_init_shape, rate = rho_init_rate, theta = rho_init_theta),
-		rho_prior = list(shape = rho_shape_prior, rate = rho_rate_prior, theta = rho_theta_prior)
+	init_vals_output <- list(
+		x_matrix = list(mean = list(jdate = X_mean_jdate), 
+						disp = list(jdate = X_disp_jdate), 
+						theta = list(jdate = X_theta_jdate)
+			),
+		basis_dim = list(mean = basis_dim_mean, 
+						disp = basis_dim_disp, 
+						theta = basis_dim_theta
+			),
+		s_matrix = list(mean = list(jdate = s_mean_jdate), 
+						disp = list(jdate = s_disp_jdate), 
+						theta = list(jdate = s_theta_jdate)
+			),
+		b_0_init = list(mean = b_0_mean_init, 
+						disp = b_0_disp_init, 
+						theta = b_0_theta_init
+			),
+		b_0_prior = b_0_prior,
+		b_init = list(mean = list(jdate = b_init_mean_jdate), 
+						disp = list(jdate = b_init_disp_jdate), 
+						theta = list(jdate = b_init_theta_jdate)
+			),
+		lambda_init = list(mean = lambda_mean_jdate_est, 
+						disp = lambda_disp_jdate_est, 
+						theta = lambda_theta_jdate_est
+			),
+		lambda_prior = list(mean = lambda_mean_prior, 
+						disp = lambda_disp_prior, 
+						theta = lambda_theta_prior
+			),
+		model = list(gamma = gamma_model, 
+						theta = theta_model
+			)
 	)
 
-	return(output_list)
+	return(init_vals_output)
 }
 
 
@@ -234,233 +201,172 @@ prior_tensor_fromcyclic <- function(basis = basis, cyclic_output=cyclic_output){
 #' @return A matrix of the infile
 #' @import dplyr
 #' @export
-prior_tensor <- function(data, knot_loc ){
+prior_tensor <- function(data, knot_loc, lambda_shape, year_pen_ratio){
 	### Extract the number of knots
 	n_knots <- sapply(knot_loc, FUN = length)
 	
-	### Add a year column if it doesn't exist
-	### It should, but just in case
-	if(!("year" %in% colnames(data))) {
-		data <- data %>%
-			mutate(year = lubridate::year(date))		
+	### Extract positive precipitation and assign all data
+	data_pos <- data %>%
+		filter(precip > 0)
+	data_all <- data
+
+	### How many years of data to sample from MLE estimate
+	if("year" %in% colnames(data_all)) {
+		n_years <- length(unique(data_all$year))
+	} else {
+		n_years <- length(unique(lubridate::year(data_all$date)))
 	}
 
-	### Remove any leap days for fitting purposes
-	data <- data %>%
-		filter(jdate <=365)
+	### Create cyclic spline basis for precipitation
+	gamma_model <- mgcv::gam(list(precip 
+		~ ti(jdate, bs=c("cc"), k = n_knots[1]) + ti(year, bs=c("cr"), k = n_knots[2]) + ti(jdate,year, bs=c("cc", "cr"), k = n_knots),
+		~ ti(jdate, bs=c("cc"), k = n_knots[1]) + ti(year, bs=c("cr"), k = n_knots[2]) + ti(jdate,year, bs=c("cc", "cr"), k = n_knots)),
+		data = data_pos, 
+		knots =  knot_loc, 
+		family=gammals(link=list("identity","log")),
+		fit = FALSE, 
+		select = TRUE)
 
-	### Add in a draw column with the unique years so this can later be joined
-	### Base number of samples from MLE off of this
-	data <- data %>% 
-		mutate(draw = as.numeric(factor(year)))
-	n_years <- max(data$draw)
+	### Create cyclic spline basis for zero precipitation
+	theta_model <- mgcv::gam(zero 
+		~ ti(jdate, bs=c("cc"), k = n_knots[1]) + ti(year, bs=c("cr"), k = n_knots[2]) + ti(jdate,year, bs=c("cc", "cr"), k = n_knots), 
+		data = data, 
+		knots =  knot_loc, 
+		family=binomial,
+		fit = FALSE, 
+		select = TRUE)
 
-	### Create MLE estimate. This will be used to set priors and initial values
-	### Create preliminary periods based on knot locations
-#	year_cuts <- unique(c(min(data$year, na.rm=TRUE),knot_loc$year, max(data$year, na.rm=TRUE)))
-#	year_cuts <- c(0, year_cuts)
+	### Extract basis matrix for mean
+	X_mean_jdate <- PredictMat(gamma_model$smooth[[1]], data_pos)
+	X_mean_year <- PredictMat(gamma_model$smooth[[2]], data_pos)
+	X_mean_tensor <- PredictMat(gamma_model$smooth[[3]], data_pos)
 
-	### Check how many observations 
-#	countbycut <- data %>% 
-#		drop_na(precip) %>%
-#		mutate(period = cut(year, year_cuts)) %>%
-#		group_by(period, .drop = FALSE) %>% 
-#		count() %>%
-#		ungroup() 
+	### Extract basis matrix for dispersion
+	X_disp_jdate <- PredictMat(gamma_model$smooth[[4]], data_pos)
+	X_disp_year <- PredictMat(gamma_model$smooth[[5]], data_pos)
+	X_disp_tensor <- PredictMat(gamma_model$smooth[[6]], data_pos)
 
-	### Merge periods that have zero observations or less than 4 years
-#	nonzero_test <- c(TRUE, countbycut$n != 0)
-#	multiyear_test <- c(TRUE, countbycut$n > (365*4))
-#	year_cuts <- year_cuts[nonzero_test & multiyear_test]
+	### Extract basis matrix For zeros
+	X_theta_jdate <- PredictMat(theta_model$smooth[[1]], data)
+	X_theta_year <- PredictMat(theta_model$smooth[[2]], data)
+	X_theta_tensor <- PredictMat(theta_model$smooth[[3]], data)
 
-	### Cut data to periods and generate MLE estiamtes for the gamma distribution
-#	data <- data %>%
-#		mutate(period = cut(year, year_cuts)) 
+	### Extract S Penalty matrices for mean and dispersion
+	s_mean_jdate <- gamma_model$smooth[[1]]$S[[1]]
+	s_mean_year <- gamma_model$smooth[[2]]$S[[1]]
+	s_mean_year_double <- gamma_model$smooth[[2]]$S[[2]]
+	s_mean_tensor_jdate <- gamma_model$smooth[[3]]$S[[1]]
+	s_mean_tensor_year <- gamma_model$smooth[[3]]$S[[2]]
 
-	### Create MLE estimate
-	### Fit each day with MLE
-	mle_fit <- mle_gamma_fit(jdate = data$jdate, values = data$precip, n = n_years)
+	s_disp_jdate <- gamma_model$smooth[[4]]$S[[1]]
+	s_disp_year <- gamma_model$smooth[[5]]$S[[1]]
+	s_disp_year_double <- gamma_model$smooth[[5]]$S[[2]]
+	s_disp_tensor_jdate <- gamma_model$smooth[[6]]$S[[1]]
+	s_disp_tensor_year <- gamma_model$smooth[[6]]$S[[2]]
+
+	### Extract S Penalty matrices for zero precip
+	s_theta_jdate <- theta_model$smooth[[1]]$S[[1]]
+	s_theta_year <- theta_model$smooth[[2]]$S[[1]]
+	s_theta_year_double <- theta_model$smooth[[2]]$S[[2]]
+	s_theta_tensor_jdate <- theta_model$smooth[[3]]$S[[1]]
+	s_theta_tensor_year <- theta_model$smooth[[3]]$S[[2]]
+
+	### Extract S scaling function
+	s_scale_pos <- sapply(gamma_model$smooth, function(x){x$S.scale})
+	s_scale_zero <- sapply(theta_model$smooth, function(x){x$S.scale})
 	
+	### Extract basis dimensions
+	basis_dim_mean <- c(dim(X_mean_jdate)[2], dim(X_mean_year)[2], dim(X_mean_tensor)[2])
+	basis_dim_disp <- c(dim(X_disp_jdate)[2], dim(X_disp_year)[2], dim(X_disp_tensor)[2])
+	basis_dim_theta <- c(dim(X_theta_jdate)[2], dim(X_theta_year)[2], dim(X_theta_tensor)[2])
 
-#	mle_fit <- data %>%
-###		dplyr::group_by(jdate, period) %>%
-#		dplyr::group_by(jdate) %>%
-#		dplyr::filter(precip > 0) %>%
-#		dplyr::summarise(shape = fitdistrplus::fitdist(precip, "gamma")[[1]][[1]], rate = fitdistrplus::fitdist(precip, "gamma")[[1]][[2]]) %>%
-#		dplyr::mutate(scale = 1/rate) %>%
-#		dplyr::mutate(mean = scale * shape) %>%
-#		dplyr::mutate(disp = 1/shape) %>%
-#		dplyr::ungroup()
+	### Evaluate cyclic spline to get init values
+	cyclic_init <- prior_cyclic(data = data, knot_loc = list(jdate = knot_loc$jdate), lambda_shape = lambda_shape[1])
 
-	### Do some reorganization to join and then remove 30 year periods
-#	mle_fit <- data %>% 
-#		full_join(mle_fit) %>%
-#		select(-period)
+	### Add on zeros for everything that is not the cyclic spline
+	b_init_mean_jdate <- cyclic_init$b_init$mean$jdate
+	b_init_mean_year <- rep(0,basis_dim_mean[2])
+	b_init_mean_tensor <- rep(0,basis_dim_mean[3])
 
-#	data <- data %>%
-#		select(-period)
+	b_init_disp_jdate <- cyclic_init$b_init$disp$jdate
+	b_init_disp_year <- rep(0,basis_dim_disp[2])
+	b_init_disp_tensor <- rep(0,basis_dim_disp[3])
 
-	data <- data %>%
-		select(date, jdate, year) %>%
-		inner_join(mle_fit$draws, by = c("jdate"))
-	
-	### Fit a tensor product spline model using mgcv
-	shape_model <- mgcv::gam(log(shape) ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE)
-	rate_model <- mgcv::gam(log(rate) ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE)
-	theta_model <- mgcv::gam(zero ~ te(jdate,year, bs=c("cc", "cr"), k = c(n_knots)), data=data, knots = knot_loc, select=FALSE,family=binomial)
+	b_init_theta_jdate <- cyclic_init$b_init$theta$jdate
+	b_init_theta_year <- rep(0,basis_dim_theta[2])
+	b_init_theta_tensor <- rep(0,basis_dim_theta[3])
 
+	### Extract the intercept from the cyclic run
+	b_0_mean_init <- cyclic_init$b_0_init$mean
+	b_0_disp_init <- cyclic_init$b_0_init$disp
+	b_0_theta_init <- cyclic_init$b_0_init$theta
 
-	### Create the prior for the mean intercept
-	b_0_shape_prior <- c(summary(shape_model)$p.table[1], summary(shape_model)$p.table[2])
-	b_0_rate_prior <- c(summary(rate_model)$p.table[1], summary(rate_model)$p.table[2])
-	b_0_theta_prior <- c(summary(theta_model)$p.table[1], summary(theta_model)$p.table[2])
+	### Extract jdate lambda from cyclic
+	lambda_mean_jdate_est <- cyclic_init$lambda_init$mean
+	lambda_disp_jdate_est <- cyclic_init$lambda_init$disp
+	lambda_theta_jdate_est <- cyclic_init$lambda_init$theta
 
-	### Create a vector for intializing the mean
-	b_shape_init <- c(coef(shape_model)[2:length(coef(shape_model))])
-	b_rate_init <- c(coef(rate_model)[2:length(coef(rate_model))])
-	b_theta_init <- c(coef(theta_model)[2:length(coef(theta_model))])
+	### Apply penalty ratio to each lambda
+	lambda_mean_init <- c(lambda_mean_jdate_est, lambda_mean_jdate_est*year_pen_ratio, lambda_mean_jdate_est*year_pen_ratio^2, lambda_mean_jdate_est, lambda_mean_jdate_est*year_pen_ratio)
+	lambda_disp_init <- c(lambda_disp_jdate_est, lambda_disp_jdate_est*year_pen_ratio, lambda_disp_jdate_est*year_pen_ratio^2, lambda_disp_jdate_est, lambda_disp_jdate_est*year_pen_ratio)
+	lambda_theta_init <- c(lambda_theta_jdate_est, lambda_theta_jdate_est*year_pen_ratio, lambda_theta_jdate_est*year_pen_ratio^2, lambda_theta_jdate_est, lambda_theta_jdate_est*year_pen_ratio)
 
-	### Extract smoothing penalty
-	lambda_shape_init <- unname(c(shape_model$sp ))
-	lambda_rate_init <- unname(c(rate_model$sp))
-	lambda_theta_init <- unname(c(theta_model$sp))
+	### Add correct names
+	names(lambda_mean_init) <- c("jdate", "year", "year_double", "tensor_jdate", "tensor_year")
+	names(lambda_disp_init) <- c("jdate", "year", "year_double", "tensor_jdate", "tensor_year")
+	names(lambda_theta_init) <- c("jdate", "year", "year_double", "tensor_jdate", "tensor_year")
 
-	### Calculate alpha the rescaling factor and then rescale
-	shape_alpha <- sapply(shape_model$smooth, "[[", "S.scale") / lambda_shape_init
-	lambda_shape_init <- c(lambda_shape_init / shape_alpha)
+	### Create matrices for gamma distributed priors on lambda
+	lambda_mean_prior <- matrix(NA, 5, 2)
+	### Add the shape parameter for lambda. Tight near normal for everything except the double penalty
+	lambda_mean_prior[,1] <- lambda_shape
 
-	rate_alpha <- sapply(rate_model$smooth, "[[", "S.scale") / lambda_rate_init
-	lambda_rate_init <- c(lambda_rate_init / rate_alpha)
+	### Replicate for other lambdas
+	lambda_disp_prior <-lambda_mean_prior
+	lambda_theta_prior <-lambda_mean_prior
 
-	theta_alpha <- sapply(theta_model$smooth, "[[", "S.scale") / lambda_theta_init
-	lambda_theta_init <- c(lambda_theta_init / theta_alpha)
+	### Calculate the rate parameter
+	lambda_mean_prior[,2] <-lambda_mean_prior[,1]/lambda_mean_init
+	lambda_disp_prior[,2] <-lambda_disp_prior[,1]/lambda_disp_init
+	lambda_theta_prior[,2] <-lambda_theta_prior[,1]/lambda_theta_init
 
-	### Extract penalty matrix
-	s_matrix <- sapply(shape_model$smooth, "[[", "S")
-
-	s_mat_1 <- s_matrix[[1]]
-	s_mat_2 <- s_matrix[[2]]
-#	s_inv_1 <- ginv(s_mat_1)
-#	s_inv_2 <- ginv(s_mat_2)
-
-	#mean_samples <- mvrnorm(n=100, b_mean_init, ginv(s_mat_1*lambda_mean_init[1] + s_mat_2*lambda_mean_init[2]))
-	#scale_samples <- mvrnorm(n=100, b_mean_init, ginv(s_mat_1*lambda_mean_init[1] + s_mat_2*lambda_mean_init[2]))
-
-	#plot(b_mean_init, type="l", ylim=c(-2,2))
-	#lines(mean_samples[1,], col="red")
-
-	#plot(mean_samples[1,1:6], type="l", ylim=c(-1,1))
-	#lines(mean_samples[2,1:6], col="red")
-	#lines(mean_samples[3,1:6], col="red")
-	#lines(mean_samples[4,1:6], col="red")
-	#lines(mean_samples[5,1:6], col="red")
-	#lines(mean_samples[1,7:13], col="blue")
-	#lines(mean_samples[2,7:13], col="blue")
-	#lines(mean_samples[3,7:13], col="blue")
-	#lines(mean_samples[4,7:13], col="blue")
-	#lines(mean_samples[5,7:13], col="blue")
-
-	rho_init_shape <- log(lambda_shape_init)
-	rho_init_rate <- log(lambda_rate_init)
-	rho_init_theta <- log(lambda_theta_init)
-
-	rho_shape_prior <- c(rho_init_shape-3, rho_init_shape + 3)
-	rho_rate_prior <- c(rho_init_rate-3, rho_init_rate + 3)
-	rho_theta_prior <- c(rho_init_theta-3, rho_init_theta + 3)
 
 	### Create output list and return
-	output_list <- list(
-		b_0 = list(shape = b_0_shape_prior, rate = b_0_rate_prior,  theta = b_0_theta_prior), 
-		b_init = list(shape = b_shape_init, rate = b_rate_init, theta = b_theta_init), 
-		lambda_init = list(shape = lambda_shape_init, rate = lambda_rate_init, theta = lambda_theta_init), 
-		rho_init = list(shape = rho_init_shape, rate = rho_init_rate, theta = rho_init_theta),
-		rho_prior = list(shape = rho_shape_prior, rate = rho_rate_prior, theta = rho_theta_prior)
+	init_vals_output <- list(
+		x_matrix = list(mean = list(jdate = X_mean_jdate, year = X_mean_year, tensor = X_mean_tensor), 
+						disp = list(jdate = X_disp_jdate, year = X_disp_year, tensor = X_disp_tensor), 
+						theta = list(jdate = X_theta_jdate, year = X_theta_year, tensor = X_theta_tensor)
+			),
+		basis_dim = list(mean = basis_dim_mean, 
+						disp = basis_dim_disp, 
+						theta = basis_dim_theta
+			),
+		s_matrix = list(mean = list(jdate = s_mean_jdate, year = s_mean_year, year_double = s_mean_year_double, tensor_jdate = s_mean_tensor_jdate, tensor_year = s_mean_tensor_year), 
+						disp = list(jdate = s_disp_jdate, year = s_disp_year, year_double = s_disp_year_double, tensor_jdate = s_disp_tensor_jdate, tensor_year = s_disp_tensor_year), 
+						theta = list(jdate = s_theta_jdate, year = s_theta_year, year_double = s_theta_year_double, tensor_jdate = s_theta_tensor_jdate, tensor_year = s_theta_tensor_year)
+			),
+		b_0_init = list(mean = b_0_mean_init, 
+						disp = b_0_disp_init, 
+						theta = b_0_theta_init
+			),
+		b_0_prior = cyclic_init$b_0_prior,
+		b_init = list(mean = list(jdate = b_init_mean_jdate, year = b_init_mean_year, tensor = b_init_mean_tensor), 
+						disp = list(jdate = b_init_disp_jdate, year = b_init_disp_year, tensor = b_init_disp_tensor), 
+						theta = list(jdate = b_init_theta_jdate, year = b_init_theta_year, tensor = b_init_theta_tensor)
+			),
+		lambda_init = list(mean = lambda_mean_init, 
+						disp = lambda_disp_init, 
+						theta = lambda_theta_init
+			),
+		lambda_prior = list(mean = lambda_mean_prior, 
+						disp = lambda_disp_prior, 
+						theta = lambda_theta_prior
+			),
+		model = list(gamma = gamma_model, 
+						theta = theta_model
+			)
 	)
 
-	return(output_list)
-
+	return(init_vals_output)
 }
-
-
-
-
-
-
-#' Magic Lambda
-#'
-#' This is where you describe the function itself
-#' contains the rownames and the subsequent columns are the sample identifiers.
-#' Any rows with duplicated row names will be dropped with the first one being
-#'
-#' @param data Dataframe with the underlying data. Columns must include variable names
-#' @param spline_type List of spline types. Either cc or cr are accepted. Names must agree with knot_loc
-#' @param knot_loc List of knot locations
-#' @return A matrix of the infile
-#' @export
-magic_lambda <- function(pre_model, lambda_year = -1, lambda_ratio = 200){
-
-	if(lambda_year == -1 & lambda_ratio == -1){
-		lambda_year <- 5000
-	}
-
-	### Extract the penalty matrix for the first parameter
-	s_1 <- pre_model$s_reparam[[1]]
-	s_2 <- pre_model$s_reparam[[2]]
-
-	match_extremes <- function(lambda_jdate, lambda_year, target){
-		penalty <- lambda_jdate * s_1 + (lambda_year) * s_2
-		random_draw <- mvrnorm(n=1000, rep(0,length(mean_beta)), ginv(penalty))
-		row_max <- apply(random_draw, 1, function(x){max(abs(x))})
-		return(abs(target - median(row_max)))
-	}
-
-	match_extremes_ratio <- function(lambda_jdate, lambda_ratio, target){
-		penalty <- lambda_jdate * s_1 + (lambda_jdate * lambda_ratio) * s_2
-		random_draw <- mvrnorm(n=1000, rep(0,length(mean_beta)), ginv(penalty))
-		row_max <- apply(random_draw, 1, function(x){max(abs(x))})
-		return(abs(target - median(row_max)))
-	}
-
-	mean_beta <- pre_model$b_init$mean
-	scale_beta <- pre_model$b_init$scale
-
-	if(lambda_year == -1 & lambda_ratio > 0){
-	lambda_lower <- optimize(match_extremes_ratio, interval = c(1E-2,1E6), lambda_ratio = lambda_ratio, target = 0.8*max(abs(mean_beta)))
-	lambda_lower <- lambda_lower$minimum
-
-	lambda_upper <- optimize(match_extremes_ratio, interval = c(1E-2,1E6), lambda_ratio = lambda_ratio, target = 0.3*max(abs(mean_beta)))
-	lambda_upper <- lambda_upper$minimum
-
-	lambda_mean_prior <- c(lambda_lower, lambda_upper, lambda_lower* lambda_ratio, lambda_upper * lambda_ratio)
-
-	lambda_lower <- optimize(match_extremes_ratio, interval = c(1E-2,1E6), lambda_ratio = lambda_ratio, target = 0.8*max(abs(scale_beta)))
-	lambda_lower <- lambda_lower$minimum
-
-	lambda_upper <- optimize(match_extremes_ratio, interval = c(1E-2,1E6), lambda_ratio = lambda_ratio, target = 0.3*max(abs(scale_beta)))
-	lambda_upper <- lambda_upper$minimum
-
-	lambda_scale_prior <- c(lambda_lower, lambda_upper, lambda_lower* lambda_ratio, lambda_upper * lambda_ratio)
-	} else {
-	lambda_lower <- optimize(match_extremes, interval = c(1E-2,1E6), lambda_year = lambda_year, target = 0.8*max(abs(mean_beta)))
-	lambda_lower <- lambda_lower$minimum
-
-	lambda_upper <- optimize(match_extremes, interval = c(1E-2,1E6), lambda_year = lambda_year, target = 0.3*max(abs(mean_beta)))
-	lambda_upper <- lambda_upper$minimum
-
-	lambda_mean_prior <- c(lambda_lower, lambda_upper, lambda_year)
-
-	lambda_lower <- optimize(match_extremes, interval = c(1E-2,1E6), lambda_year = lambda_year, target = 0.8*max(abs(scale_beta)))
-	lambda_lower <- lambda_lower$minimum
-
-	lambda_upper <- optimize(match_extremes, interval = c(1E-2,1E6), lambda_year = lambda_year, target = 0.3*max(abs(scale_beta)))
-	lambda_upper <- lambda_upper$minimum
-
-	lambda_scale_prior <- c(lambda_lower, lambda_upper, lambda_year)
-	}
-
-
-	return(list(mean = lambda_mean_prior, scale = lambda_scale_prior))
-}
-
-
 
