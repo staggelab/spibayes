@@ -14,6 +14,8 @@
 model_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sample", output_dir = getwd()){
 	require(cmdstanr)
 
+	spi_input <- spi_input$input
+
 	### Run the correct model
 	if(spi_input$type == "cyclic"){
 		model_fit <- cyclic_fit(spi_input = spi_input, n_chains = n_chains, iter = iter, cores = cores, engine = engine, output_dir = output_dir)

@@ -36,7 +36,7 @@ pre_proc <- function(data, type, knot_loc, lambda_shape = c(500, 5000, 0.5, 5000
 	preproc_output$type <- type
 	preproc_output$knot_loc <- knot_loc
 
-	return(preproc_output)
+	return(list(input=preproc_output))
 }
 
 #' Estimate priors for cyclic spline

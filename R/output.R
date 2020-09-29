@@ -29,11 +29,11 @@ predict_vals <- function(model_fit, newdata = NULL){
 		PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_pos)
 		)
 	x_disp <- cbind(1, 
-		PredictMat(model_fit$input$model$gamma$smooth[[4]],newdata_pos)
+		PredictMat(model_fit$input$model$gamma$smooth[[2]],newdata_pos)
 	)
 
 	x_theta <- cbind(1, 
-		PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_all)
+		PredictMat(model_fit$input$model$theta$smooth[[1]],newdata_all)
 	)
 
 	} else if (model_fit$input$type == "tensor") {
