@@ -60,7 +60,10 @@ predict_vals <- function(model_fit, newdata = NULL){
 
 	}
 
-	### Separate by type of model first
+	### Separate first by init vs fit
+	### Then by type of model first
+
+	if("fit_params" %in% names(model_fit) == TRUE){
 	if(model_fit$fit_params$engine == "optimize") {
 		model_read <- cmdstanr::read_cmdstan_csv(model_fit$model_fit$output_files(), variables = var_list)
 
@@ -85,12 +88,29 @@ predict_vals <- function(model_fit, newdata = NULL){
 		theta_est <- exp(theta_est)/(1+ exp(theta_est))
 	} else if (model_fit$fit_params$engine == "variational") {
 	
-	
 	} else if (model_fit$fit_params$engine == "sample") {
 	
-
 	}
+	} else {
 
+		b_0_mean <- model_fit$input$b_0_init$mean
+		b_mean <- c(unlist(model_fit$input$b_init$mean))
+		b_mean <- t(as.matrix(c(b_0_mean, b_mean)))
+		mean_est <- x_mean %*% t(b_mean)
+		mean_est <- exp(mean_est)
+
+		b_0_disp <- model_fit$input$b_0_init$disp
+		b_disp <- c(unlist(model_fit$input$b_init$disp))
+		b_disp <- t(as.matrix(c(b_0_disp, b_disp)))
+		disp_est <- x_disp %*% t(b_disp)
+		shape_est <- 1/ exp(-7 + log(1 + exp(disp_est)))
+
+		b_0_theta <- model_fit$input$b_0_init$theta
+		b_theta <- c(unlist(model_fit$input$b_init$theta))
+		b_theta <- t(as.matrix(c(b_0_theta, b_theta)))
+		theta_est <- x_theta %*% t(b_theta)
+		theta_est <- exp(theta_est)/(1+ exp(theta_est))
+	}
 
 	if (is.null(newdata)){
 	param_gamma <- newdata_pos %>%
