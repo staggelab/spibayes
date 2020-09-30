@@ -68,7 +68,7 @@ predict_vals <- function(model_fit, newdata = NULL){
 		model_read <- cmdstanr::read_cmdstan_csv(model_fit$model_fit$output_files(), variables = var_list)
 
 		param_est <- as.data.frame(model_read$point_estimates) %>%
-			mutate(.chain == 0, .iteration = 1, .draw = 1)
+			mutate(.chain = 0, .iteration = 1, .draw = 1)
 
 		b_0_mean <- param_est %>% select(starts_with("b_0_mean"))
 		b_mean <- param_est %>% select(starts_with("b_mean_"))
@@ -133,6 +133,9 @@ predict_vals <- function(model_fit, newdata = NULL){
 		b_theta <- t(as.matrix(c(b_0_theta, b_theta)))
 		theta_est <- x_theta %*% t(b_theta)
 		theta_est <- exp(theta_est)/(1+ exp(theta_est))
+
+		param_est <- data.frame(.chain = 0, .iteration = 1, .draw = 1)
+
 	}
 
 	for(j in seq(1, dim(param_est)[1])){
