@@ -67,7 +67,8 @@ predict_vals <- function(model_fit, newdata = NULL){
 	if(model_fit$fit_params$engine == "optimize") {
 		model_read <- cmdstanr::read_cmdstan_csv(model_fit$model_fit$output_files(), variables = var_list)
 
-		param_est <- as.data.frame(model_read$point_estimates)
+		param_est <- as.data.frame(model_read$point_estimates) %>%
+			mutate(.chain == 0, .iteration = 1, .draw = 1)
 
 		b_0_mean <- param_est %>% select(starts_with("b_0_mean"))
 		b_mean <- param_est %>% select(starts_with("b_mean_"))
@@ -90,6 +91,28 @@ predict_vals <- function(model_fit, newdata = NULL){
 	
 	} else if (model_fit$fit_params$engine == "sample") {
 	
+		param_est <- model_fit$model_fit$draws(var_list) %>%
+			posterior::as_draws_df() %>%
+			as.data.frame()
+
+		b_0_mean <- param_est %>% select(starts_with("b_0_mean"))
+		b_mean <- param_est %>% select(starts_with("b_mean_"))
+		b_mean <- as.matrix(cbind(b_0_mean, b_mean))
+		mean_est <- x_mean %*% t(b_mean)
+		mean_est <- exp(mean_est)
+
+		b_0_disp <- param_est %>% select(starts_with("b_0_disp"))
+		b_disp <- param_est %>% select(starts_with("b_disp_"))
+		b_disp <- as.matrix(cbind(b_0_disp, b_disp))
+		disp_est <- x_disp %*% t(b_disp)
+		shape_est <- 1/ exp(-7 + log(1 + exp(disp_est)))
+
+		b_0_theta <- param_est %>% select(starts_with("b_0_theta"))
+		b_theta <- param_est %>% select(starts_with("b_theta_"))
+		b_theta <- as.matrix(cbind(b_0_theta, b_theta))
+		theta_est <- x_theta %*% t(b_theta)
+		theta_est <- exp(theta_est)/(1+ exp(theta_est))
+
 	}
 	} else {
 
@@ -112,36 +135,40 @@ predict_vals <- function(model_fit, newdata = NULL){
 		theta_est <- exp(theta_est)/(1+ exp(theta_est))
 	}
 
-	if (is.null(newdata)){
-	param_gamma <- newdata_pos %>%
-		mutate(mean = c(mean_est)) %>%
-		mutate(shape = c(shape_est)) %>%
-		mutate(disp = 1/shape) %>%
-		mutate(scale = mean/shape) %>%
-		mutate(rate = 1/scale)
+	for(j in seq(1, dim(param_est)[1])){
+		param_gamma_j <- newdata_pos %>%
+			mutate(chain = param_est$.chain[j], 
+				iteration = param_est$.iteration[j],
+				draw = param_est$.draw[j]) %>%
+			mutate(mean = mean_est[,j], shape = shape_est[,j])
 
-	param_theta <- newdata_all %>%
-		mutate(theta = c(theta_est)) 
+		param_theta_j <- newdata_all %>%
+			mutate(chain = param_est$.chain[j], 
+				iteration = param_est$.iteration[j],
+				draw = param_est$.draw[j]) %>%
+			mutate(theta = theta_est[,j])
 
-	output_list <- list(gamma = param_gamma, theta = param_theta)
-	} else {
-	param_output <- newdata_all %>%
-		mutate(mean = c(mean_est)) %>%
-		mutate(shape = c(shape_est)) %>%
+		if(j == 1){
+			param_gamma <- param_gamma_j
+			param_theta <- param_theta_j
+		} else {
+			param_gamma <- bind_rows(param_gamma, param_gamma_j)
+			param_theta <- bind_rows(param_theta, param_theta_j)
+		}
+	}
+
+	param_gamma <- param_gamma %>%
 		mutate(disp = 1/shape) %>%
 		mutate(scale = mean/shape) %>%
 		mutate(rate = 1/scale) %>%
-		mutate(theta = c(theta_est) )
+		relocate(chain, iteration, draw, .after = rate)
 
-	output_list = param_output
-	}
-
+	output_list <- list(gamma = param_gamma, theta = param_theta)
 
 	return(output_list)
 
 }
 	
-
 
 
 
