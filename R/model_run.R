@@ -126,11 +126,11 @@ cyclic_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
 			
 		model_fit <- cyclic_mod$sample(
   			data = data_fitting,
-			iter = iter,
+			#iter = iter,
 			chains = n_chains,
 			parallel_chains = cores,			
-			#iter_warmup = ,
-			#iter_sampling = , 
+			iter_warmup = iter*0.2,
+			iter_sampling = iter *0.8, 
   			init = init_vals,
   			refresh = 10, 
 			save_warmup=TRUE,
