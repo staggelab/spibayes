@@ -25,10 +25,6 @@ data {
   matrix[1,2] lambda_theta_prior;
 
   matrix[3,2] b_0_prior;
-
-  matrix[1,2] sigma_mean_prior;
-  matrix[1,2] sigma_disp_prior;
-  matrix[1,2] sigma_theta_prior;
  }
 transformed data {  
   vector[N_pos] one_vec;
@@ -47,19 +43,14 @@ parameters {
   vector[basis_dim_disp] b_disp_jdate;  
   vector[basis_dim_theta] b_theta_jdate;  
 
-  vector[N_pos] mean_param;
-  vector[N_pos] disp_param;  
-  vector[N] theta_param; 
-
   vector<lower = 0>[1]  lambda_mean ;
   vector<lower = 0>[1]  lambda_disp ;
   vector<lower = 0>[1]  lambda_theta ;
- 
-  real<lower=0> sigma_mean;
-  real<lower=0> sigma_disp;
-  real<lower=0> sigma_theta;
 }
 transformed parameters { 
+  vector[N_pos] mean_param;  
+  vector[N_pos] disp_param;
+
   matrix[basis_dim_mean, basis_dim_mean] K_mean_jdate; 
   matrix[basis_dim_disp, basis_dim_disp] K_disp_jdate; 
   matrix[basis_dim_theta, basis_dim_theta] K_theta_jdate; 
@@ -75,32 +66,12 @@ transformed parameters {
   K_theta_jdate = s_theta_jdate * lambda_theta[1] ;
 
   // Calculate mean and dispersion
+  mean_param = exp(b_0_mean + X_mean_jdate * b_mean_jdate) ;
+
+  disp_param = exp(seven_vec + log(one_vec + exp(b_0_disp + X_disp_jdate * b_disp_jdate)));
+
 } 
 model {
-  vector[N_pos] mu;  
-  vector[N_pos] phi;  
-  vector[N] theta; 
-
-  vector[N_pos] shape_param;
-  vector[N_pos] rate_param;  
-
-  mu = b_0_mean + X_mean_jdate * b_mean_jdate ;
-  phi = seven_vec + log(one_vec + exp(b_0_disp + X_disp_jdate * b_disp_jdate));
-  theta = b_0_theta + X_theta_jdate * b_theta_jdate ; 
-
-  disp_param ~ normal(phi, sigma_disp);
-  mean_param ~ normal(mu,sigma_mean);
-  theta_param ~ normal(theta, sigma_theta);
-
-  shape_param = one_vec ./ exp(disp_param);
-  rate_param = one_vec ./ (exp(mean_param) .* exp(disp_param)) ;
-
-  // Estimate y values using a gamma distribution, Stan uses shape and inverse scale parameters
-  y_pos ~ gamma(shape_param, rate_param);   // 
-
-  // Estimate zeros using logit model
-  y_zero ~ bernoulli_logit(theta_param);
-
   lambda_mean[1] ~ gamma(lambda_mean_prior[1,1], lambda_mean_prior[1,2]);
   lambda_disp[1] ~ gamma(lambda_disp_prior[1,1], lambda_disp_prior[1,2]);
   lambda_theta[1] ~ gamma(lambda_theta_prior[1,1], lambda_theta_prior[1,2]);
@@ -111,22 +82,18 @@ model {
    b_0_disp  ~ normal(b_0_prior[2,1], b_0_prior[2,2]);   
    b_disp_jdate ~ multi_normal_prec(rep_vector(0, basis_dim_disp), K_disp_jdate); 
 
+
    b_0_theta ~ normal(b_0_prior[3,1], b_0_prior[3,2]);   
    b_theta_jdate ~ multi_normal_prec(rep_vector(0, basis_dim_theta), K_theta_jdate); 
+  
+  // Estimate y values using a gamma distribution, Stan uses shape and inverse scale parameters
+   y_pos ~ gamma(one_vec ./ disp_param, one_vec ./ (mean_param .* disp_param) );   // 
 
-   //sigma_mean ~ gamma(1.1, 99);
-   //sigma_disp ~ gamma(1.1, 99);
-   //sigma_theta ~ gamma(1.1, 99);
-
-  //sigma_mean ~ cauchy(0,0.08);
-  //sigma_disp ~ cauchy(0,0.12);
-  //sigma_theta ~ cauchy(0,0.6);
-
-  sigma_mean ~ gamma(sigma_mean_prior[1,1], sigma_mean_prior[1,2]);
-  sigma_disp ~ gamma(sigma_disp_prior[1,1], sigma_disp_prior[1,2]);
-  sigma_theta ~ gamma(sigma_theta_prior[1,1], sigma_theta_prior[1,2]);
+  // Estimate zeros using logit model
+	y_zero ~ bernoulli_logit(b_0_theta + X_theta_jdate * b_theta_jdate);
 
 }
 generated quantities {
 
 }
+

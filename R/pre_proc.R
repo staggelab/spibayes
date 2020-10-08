@@ -146,6 +146,29 @@ prior_cyclic <- function(data, knot_loc, lambda_shape ){
 	lambda_disp_prior[,2] <-lambda_disp_prior[,1]/lambda_disp_jdate_est
 	lambda_theta_prior[,2] <-lambda_theta_prior[,1]/lambda_theta_jdate_est
 
+	### Sigma
+	sigma_df <- data_pos %>%
+		group_by(jdate) %>%
+		group_modify(~ est_gamma_sigma(.x$precip, n = 100)) %>%
+		ungroup()
+
+	sigma_theta <- data_all %>%
+		group_by(jdate) %>%
+		group_modify(~ est_theta_sigma(.x$zero)) %>%
+		ungroup()
+
+	sigma_mean <- median(sigma_df$sigma_mean)
+	sigma_disp <- median(sigma_df$sigma_disp)
+	sigma_theta <- median(sigma_theta$sigma_theta)
+
+	sigma_mean_prior <- matrix(NA, 1, 2)
+	sigma_mean_prior[,1] <- 99
+	sigma_disp_prior <- sigma_mean_prior
+	sigma_theta_prior <- sigma_mean_prior
+	sigma_mean_prior[,2] <-sigma_mean_prior[,1]/sigma_mean
+	sigma_disp_prior[,2] <-sigma_disp_prior[,1]/sigma_disp
+	sigma_theta_prior[,2] <-sigma_theta_prior[,1]/sigma_theta
+
 	### Create output list and return
 	init_vals_output <- list(
 		x_matrix = list(mean = list(jdate = X_mean_jdate), 
@@ -176,6 +199,14 @@ prior_cyclic <- function(data, knot_loc, lambda_shape ){
 		lambda_prior = list(mean = lambda_mean_prior, 
 						disp = lambda_disp_prior, 
 						theta = lambda_theta_prior
+			),
+		sigma_init = list(mean = sigma_mean, 
+						disp = sigma_disp, 
+						theta = sigma_theta
+			),
+		sigma_prior = list(mean = sigma_mean_prior, 
+						disp = sigma_disp_prior, 
+						theta = sigma_theta_prior
 			),
 		model = list(gamma = gamma_model, 
 						theta = theta_model
@@ -369,4 +400,50 @@ prior_tensor <- function(data, knot_loc, lambda_shape, year_pen_ratio){
 
 	return(init_vals_output)
 }
+
+
+
+
+
+#' Extract draws from a fitdistrplus distribution using standard error variance covariance matrix
+#'
+#' This is where you describe the function itself
+#' contains the rownames and the subsequent columns are the sample identifiers.
+#' Any rows with duplicated row names will be dropped with the first one being
+#'
+#' @param data Dataframe with the underlying data. Columns must include variable names
+#' @param n Number of draws to calculate
+#' @export
+est_gamma_sigma <- function(data, n){
+	data <- data[data > 0 & !is.na(data)]
+	fitted <- fitdist(data, "gamma")
+	draws <- mvrnorm(n, mu = coef(fitted), Sigma = vcov(fitted)) 
+	draws <- draws %>%
+		as.data.frame() %>%
+		mutate(scale = 1/rate) %>%
+		mutate(mean = scale * shape) %>%
+		mutate(disp = 1/shape) %>%
+		mutate(draw = seq(1,n)) %>%
+		mutate(type = "draw")
+
+	estimate <- data.frame(shape = coef(fitted)[[1]], rate = coef(fitted)[[2]]) %>%
+		mutate(scale = 1/rate) %>%
+		mutate(mean = scale * shape) %>%
+		mutate(disp = 1/shape) %>%
+		mutate(draw = 0) %>%
+		mutate(type = "estimate")
+
+	output_df <- data.frame(sigma_mean = sd(log(draws$mean) - log(estimate$mean)), sigma_disp = sd(log(draws$disp) - log(estimate$disp)))
+
+	return(output_df)
+}
+
+
+est_theta_sigma <- function(data){
+	glm_pos <- glm(data ~ 1, family = "binomial")
+	output_df <- data.frame(sigma_theta = summary(glm_pos)$coefficients[[2]])
+
+	return(output_df)
+}
+
 

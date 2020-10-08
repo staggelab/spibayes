@@ -80,7 +80,11 @@ cyclic_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
 
 		lambda_mean_prior = spi_input$lambda_prior$mean,
 		lambda_disp_prior = spi_input$lambda_prior$disp,
-		lambda_theta_prior = spi_input$lambda_prior$theta
+		lambda_theta_prior = spi_input$lambda_prior$theta, 
+
+		sigma_mean_prior = spi_input$sigma_prior$mean,
+		sigma_disp_prior = spi_input$sigma_prior$disp,
+		sigma_theta_prior = spi_input$sigma_prior$theta
 	)
 
 	### Ensure the penalties positive definite
@@ -99,7 +103,10 @@ cyclic_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
 		b_theta_jdate = spi_input$b_init$theta$jdate,
 		lambda_mean = unlist(spi_input$lambda_init$mean),
 		lambda_disp = unlist(spi_input$lambda_init$disp),
-		lambda_theta = unlist(spi_input$lambda_init$theta)
+		lambda_theta = unlist(spi_input$lambda_init$theta),
+		sigma_mean = unlist(spi_input$sigma_init$mean),
+		sigma_disp = unlist(spi_input$sigma_init$disp),
+		sigma_theta = unlist(spi_input$sigma_init$theta)
 	)
 	###Initial values must be one list for each chain including the first
 	init_vals <- list(init_vals)
@@ -117,7 +124,13 @@ cyclic_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
 	}
 
 	### Compile the model
-	cyclic_mod <- cmdstan_model(system.file("models/cyclic_ti.stan", package = "spibayes"))
+	if (engine == "optimize"){
+		cyclic_mod <- cmdstan_model(system.file("models/cyclic_ti_optimize.stan", package = "spibayes"))
+	} else {
+		cyclic_mod <- cmdstan_model(system.file("models/cyclic_ti.stan", package = "spibayes"))
+	}
+
+	#	cyclic_mod <- cmdstan_model(system.file("models/cyclic_ti.stan", package = "spibayes"))
 
 	### Run the model
 	if(engine == "sample"){
@@ -128,9 +141,9 @@ cyclic_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
   			data = data_fitting,
 			#iter = iter,
 			chains = n_chains,
-			parallel_chains = cores,			
-			iter_warmup = iter*0.2,
-			iter_sampling = iter *0.8, 
+			#parallel_chains = cores,			
+			iter_warmup = iter*0.3,
+			iter_sampling = iter *0.7, 
   			init = init_vals,
   			refresh = 10, 
 			save_warmup=TRUE,
