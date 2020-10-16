@@ -226,14 +226,14 @@ predict_vals <- function(model_fit, newdata = NULL){
 
 		### If tensor add these columns	
 		if(model_fit$input$type == "tensor") {
-			marginal_mean_j <- marginal_mean_j %>%
-				mutate(mean_year = mean_year[,j], mean_tensor = mean_tensor[,j])
+			marginal_mean_j$mean_year <- c(mean_year[,j])
+			marginal_mean_j$mean_tensor <- c(mean_tensor[,j])
 
-			marginal_disp_j <- marginal_disp_j %>%
-				mutate(disp_year = disp_year[,j], disp_tensor = disp_tensor[,j])
+			marginal_disp_j$disp_year <- c(disp_year[,j])
+			marginal_disp_j$disp_tensor <- c(disp_tensor[,j])
 
-			marginal_theta_j <- marginal_theta_j %>%
-				mutate(theta_year = theta_year[,j], theta_tensor = theta_tensor[,j])
+			marginal_theta_j$theta_year <- c(theta_year[,j])
+			marginal_theta_j$theta_tensor <- c(theta_tensor[,j])
 		}
 
 	marginal_mean_j <- marginal_mean_j %>%
