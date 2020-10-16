@@ -362,6 +362,29 @@ prior_tensor <- function(data, knot_loc, lambda_shape, year_pen_ratio){
 	lambda_theta_prior[,2] <-lambda_theta_prior[,1]/lambda_theta_init
 
 
+	### Sigma
+	sigma_df <- data_pos %>%
+		group_by(jdate) %>%
+		group_modify(~ est_gamma_sigma(.x$precip, n = 100)) %>%
+		ungroup()
+
+	sigma_theta <- data_all %>%
+		group_by(jdate) %>%
+		group_modify(~ est_theta_sigma(.x$zero)) %>%
+		ungroup()
+
+	sigma_mean <- median(sigma_df$sigma_mean)
+	sigma_disp <- median(sigma_df$sigma_disp)
+	sigma_theta <- median(sigma_theta$sigma_theta)
+
+	sigma_mean_prior <- matrix(NA, 1, 2)
+	sigma_mean_prior[,1] <- 99
+	sigma_disp_prior <- sigma_mean_prior
+	sigma_theta_prior <- sigma_mean_prior
+	sigma_mean_prior[,2] <-sigma_mean_prior[,1]/sigma_mean
+	sigma_disp_prior[,2] <-sigma_disp_prior[,1]/sigma_disp
+	sigma_theta_prior[,2] <-sigma_theta_prior[,1]/sigma_theta
+
 	### Create output list and return
 	init_vals_output <- list(
 		x_matrix = list(mean = list(jdate = X_mean_jdate, year = X_mean_year, tensor = X_mean_tensor), 
@@ -392,6 +415,14 @@ prior_tensor <- function(data, knot_loc, lambda_shape, year_pen_ratio){
 		lambda_prior = list(mean = lambda_mean_prior, 
 						disp = lambda_disp_prior, 
 						theta = lambda_theta_prior
+			),
+		sigma_init = list(mean = sigma_mean, 
+						disp = sigma_disp, 
+						theta = sigma_theta
+			),
+		sigma_prior = list(mean = sigma_mean_prior, 
+						disp = sigma_disp_prior, 
+						theta = sigma_theta_prior
 			),
 		model = list(gamma = gamma_model, 
 						theta = theta_model
