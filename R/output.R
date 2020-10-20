@@ -82,13 +82,13 @@ predict_vals <- function(model_fit, newdata = NULL){
 		sigma_mean <- matrix(rep(NA, length(mean_jdate)), dim(mean_jdate))
 
 		b_0_disp <- param_est %>% select(starts_with("b_0_disp"))
-		b_disp_jdate <- param_est %>% select(starts_with("b_disp_"))
+		b_disp_jdate <- param_est %>% select(starts_with("b_disp_jdate"))
 		disp_0 <- t(b_0_disp)
 		disp_jdate <- x_disp_jdate %*% t(b_disp_jdate)
 		sigma_disp <- matrix(rep(NA, length(disp_jdate)), dim(disp_jdate))
 
 		b_0_theta <- param_est %>% select(starts_with("b_0_theta"))
-		b_theta_jdate <- param_est %>% select(starts_with("b_theta_"))
+		b_theta_jdate <- param_est %>% select(starts_with("b_theta_jdate"))
 		theta_0 <- t(b_0_theta)
 		theta_jdate <- x_theta_jdate %*% t(b_theta_jdate)
 		sigma_theta <- matrix(rep(NA, length(theta_jdate)), dim(theta_jdate))

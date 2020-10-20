@@ -298,11 +298,11 @@ tensor_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
 			
 		model_fit <- tensor_mod$sample(
   			data = data_fitting,
-			iter = iter,
+			#iter = iter,
 			chains = n_chains,
-			parallel_chains = cores,			
-			#iter_warmup = ,
-			#iter_sampling = , 
+			#parallel_chains = cores,			
+			iter_warmup = iter*0.3,
+			iter_sampling = iter *0.7, 
   			init = init_vals,
   			refresh = 10, 
 			save_warmup=TRUE,
