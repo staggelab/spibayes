@@ -11,6 +11,8 @@
 #' @export
 pre_proc <- function(data, type, knot_loc, lambda_shape = c(500, 5000, 0.5, 5000, 5000), year_pen_ratio = 100){
 
+	require(mgcv)
+
 	### Catch - if there is no precip column
 	if(!("precip" %in% colnames(data))){
  		stop('There must be a column titled precip (lowercase)')
@@ -68,7 +70,7 @@ prior_cyclic <- function(data, knot_loc, lambda_shape ){
 	}
 
 	### Fit a cyclic spline model for gamma distributed precip
-	gamma_model <- gam(list(precip 
+	gamma_model <- mgcv::gam(list(precip 
 		~ ti(jdate, bs=c("cc"), k = n_knots[1]),
 		~ ti(jdate, bs=c("cc"), k = n_knots[1])),
 		data = data_pos, 
