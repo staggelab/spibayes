@@ -74,7 +74,6 @@ transformed parameters {
   // Penalize for theta
   K_theta_jdate = s_theta_jdate * lambda_theta[1] ;
 
-  // Calculate mean and dispersion
 } 
 model {
   vector[N_pos] mu;  
@@ -88,8 +87,8 @@ model {
   phi = seven_vec + log(one_vec + exp(b_0_disp + X_disp_jdate * b_disp_jdate));
   theta = b_0_theta + X_theta_jdate * b_theta_jdate ; 
 
-  disp_param ~ normal(phi, sigma_disp);
   mean_param ~ normal(mu,sigma_mean);
+  disp_param ~ normal(phi, sigma_disp);
   theta_param ~ normal(theta, sigma_theta);
 
   shape_param = one_vec ./ exp(disp_param);
