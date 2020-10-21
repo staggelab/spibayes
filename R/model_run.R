@@ -246,7 +246,11 @@ tensor_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
 
 		lambda_mean_prior = spi_input$lambda_prior$mean,
 		lambda_disp_prior = spi_input$lambda_prior$disp,
-		lambda_theta_prior = spi_input$lambda_prior$theta
+		lambda_theta_prior = spi_input$lambda_prior$theta, 
+
+		sigma_mean_prior = spi_input$sigma_prior$mean,
+		sigma_disp_prior = spi_input$sigma_prior$disp,
+		sigma_theta_prior = spi_input$sigma_prior$theta
 	)
 
 	### Ensure the penalties positive definite
@@ -271,7 +275,10 @@ tensor_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
 		b_theta_tensor = spi_input$b_init$theta$tensor,
 		lambda_mean = unlist(spi_input$lambda_init$mean),
 		lambda_disp = unlist(spi_input$lambda_init$disp),
-		lambda_theta = unlist(spi_input$lambda_init$theta)
+		lambda_theta = unlist(spi_input$lambda_init$theta),
+		sigma_mean = unlist(spi_input$sigma_init$mean),
+		sigma_disp = unlist(spi_input$sigma_init$disp),
+		sigma_theta = unlist(spi_input$sigma_init$theta)
 	)
 	###Initial values must be one list for each chain including the first
 	init_vals <- list(init_vals)
@@ -289,7 +296,12 @@ tensor_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
 	}
 
 	### Compile the model
-	tensor_mod <- cmdstan_model(system.file("models/tensor_ti.stan", package = "spibayes"))
+	if (engine == "optimize"){
+		tensor_mod <- cmdstan_model(system.file("models/tensor_ti_optimize.stan", package = "spibayes"))
+	} else {
+		tensor_mod <- cmdstan_model(system.file("models/tensor_ti.stan", package = "spibayes"))
+	}
+
 
 	### Run the model
 	if(engine == "sample"){
