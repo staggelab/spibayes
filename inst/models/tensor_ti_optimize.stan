@@ -115,24 +115,15 @@ transformed parameters {
 model {
   vector[N_pos] mu;  
   vector[N_pos] phi;  
-  vector[N] theta; 
-
-  vector[N_pos] shape_param;
-  vector[N_pos] rate_param;  
 
   mu = b_0_mean + X_mean_jdate * b_mean_jdate + X_mean_year * b_mean_year + X_mean_tensor * b_mean_tensor ;
   phi = seven_vec + log(one_vec + exp(b_0_disp + X_disp_jdate * b_disp_jdate + X_disp_year * b_disp_year + X_disp_tensor * b_disp_tensor));
-  theta = b_0_theta + X_theta_jdate * b_theta_jdate + X_theta_year * b_theta_year + X_theta_tensor * b_theta_tensor; 
-
-  shape_param = one_vec ./ exp(phi);
-  rate_param = one_vec ./ (exp(mu) .* exp(phi)) ;
 
   // Estimate y values using a gamma distribution, Stan uses shape and inverse scale parameters
-  y_pos ~ gamma(shape_param, rate_param);   // 
+  y_pos ~ gamma(one_vec ./ exp(phi), one_vec ./ (exp(mu) .* exp(phi)));   // 
 
   // Estimate zeros using logit model
-  y_zero ~ bernoulli_logit(theta);
-
+  y_zero ~ bernoulli_logit(b_0_theta + X_theta_jdate * b_theta_jdate + X_theta_year * b_theta_year + X_theta_tensor * b_theta_tensor);
 
   lambda_mean[1] ~ gamma(lambda_mean_prior[1,1], lambda_mean_prior[1,2]);
   lambda_mean[2] ~ gamma(lambda_mean_prior[2,1], lambda_mean_prior[2,2]);
