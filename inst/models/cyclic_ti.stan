@@ -113,17 +113,13 @@ model {
    b_0_theta ~ normal(b_0_prior[3,1], b_0_prior[3,2]);   
    b_theta_jdate ~ multi_normal_prec(rep_vector(0, basis_dim_theta), K_theta_jdate); 
 
-   //sigma_mean ~ gamma(1.1, 99);
-   //sigma_disp ~ gamma(1.1, 99);
-   //sigma_theta ~ gamma(1.1, 99);
+  sigma_mean ~ cauchy(0,0.5);
+  sigma_disp ~ cauchy(0,0.5);
+  sigma_theta ~ cauchy(0,0.5);
 
-  //sigma_mean ~ cauchy(0,0.08);
-  //sigma_disp ~ cauchy(0,0.12);
-  //sigma_theta ~ cauchy(0,0.6);
-
-  sigma_mean ~ gamma(sigma_mean_prior[1,1], sigma_mean_prior[1,2]);
-  sigma_disp ~ gamma(sigma_disp_prior[1,1], sigma_disp_prior[1,2]);
-  sigma_theta ~ gamma(sigma_theta_prior[1,1], sigma_theta_prior[1,2]);
+  //sigma_mean ~ gamma(sigma_mean_prior[1,1], sigma_mean_prior[1,2]);
+  //sigma_disp ~ gamma(sigma_disp_prior[1,1], sigma_disp_prior[1,2]);
+  //sigma_theta ~ gamma(sigma_theta_prior[1,1], sigma_theta_prior[1,2]);
 
 }
 generated quantities {

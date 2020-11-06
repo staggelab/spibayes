@@ -5,12 +5,12 @@
 #' contains the rownames and the subsequent columns are the sample identifiers.
 #' Any rows with duplicated row names will be dropped with the first one being
 #'
-#' @param model_fit Dataframe with the underlying data. Columns must include variable names
-#' @param newdata List of spline types. Either cc or cr are accepted. Names must agree with knot_loc
-#' @param type Simple gives back only the parameters, Marginal gives each marginal
+#' @param model_fit spline object created from fit_model
+#' @param newdata dataframe where you would like new estimates. Defaults to NULL or 
+#' @param saved_model Simple gives back only the parameters, Marginal gives each marginal
 #' @return A matrix of the infile
 #' @export
-predict_vals <- function(model_fit, newdata = NULL){
+predict_vals <- function(model_fit, newdata = NULL, saved_model = NULL){
 
 	if (is.null(newdata)){
 		newdata_pos <- model_fit$input$data_pos
@@ -25,44 +25,25 @@ predict_vals <- function(model_fit, newdata = NULL){
 
 		var_list <- c("b_0_mean", "b_0_disp", "b_0_theta", "b_mean_jdate", "b_disp_jdate", "b_theta_jdate", "lambda_mean", "lambda_disp", "lambda_theta")
 
-	x_mean_jdate <- PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_pos)
-	x_disp_jdate <- PredictMat(model_fit$input$model$gamma$smooth[[2]],newdata_pos)
-	x_theta_jdate <- PredictMat(model_fit$input$model$theta$smooth[[1]],newdata_all)
+	x_mean_jdate <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_pos)
+	x_disp_jdate <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[2]],newdata_pos)
+	x_theta_jdate <- mgcv::PredictMat(model_fit$input$model$theta$smooth[[1]],newdata_all)
 
 	} else if (model_fit$input$type == "tensor") {
 
 		var_list <- c("b_0_mean", "b_0_disp", "b_0_theta", "b_mean_jdate", "b_mean_year", "b_mean_tensor", "b_disp_jdate", "b_disp_year", "b_disp_tensor","b_theta_jdate", "b_theta_year", "b_theta_tensor", "lambda_mean", "lambda_disp", "lambda_theta")
 
-	x_mean_jdate <- PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_pos)
-	x_mean_year <- PredictMat(model_fit$input$model$gamma$smooth[[2]],newdata_pos)
-	x_mean_tensor <- PredictMat(model_fit$input$model$gamma$smooth[[3]],newdata_pos)
+	x_mean_jdate <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_pos)
+	x_mean_year <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[2]],newdata_pos)
+	x_mean_tensor <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[3]],newdata_pos)
 
-	x_disp_jdate <- PredictMat(model_fit$input$model$gamma$smooth[[4]],newdata_pos)
-	x_disp_year <- PredictMat(model_fit$input$model$gamma$smooth[[5]],newdata_pos)
-	x_disp_tensor <- PredictMat(model_fit$input$model$gamma$smooth[[6]],newdata_pos)
+	x_disp_jdate <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[4]],newdata_pos)
+	x_disp_year <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[5]],newdata_pos)
+	x_disp_tensor <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[6]],newdata_pos)
 
-	x_theta_jdate <- PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_all)
-	x_theta_year <- PredictMat(model_fit$input$model$gamma$smooth[[2]],newdata_all)
-	x_theta_tensor <- PredictMat(model_fit$input$model$gamma$smooth[[3]],newdata_all)
-
-	#x_mean <- cbind(1, 
-	#	PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_pos),
-	#	PredictMat(model_fit$input$model$gamma$smooth[[2]],newdata_pos),
-	#	PredictMat(model_fit$input$model$gamma$smooth[[3]],newdata_pos)
-	#	)
-
-	#x_disp <- cbind(1, 
-	#	PredictMat(model_fit$input$model$gamma$smooth[[4]],newdata_pos),
-	#	PredictMat(model_fit$input$model$gamma$smooth[[5]],newdata_pos),
-	#	PredictMat(model_fit$input$model$gamma$smooth[[6]],newdata_pos)
-	#)
-
-	#x_theta <- cbind(1, 
-	#	PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_all),
-	#	PredictMat(model_fit$input$model$theta$smooth[[2]],newdata_all),
-	#	PredictMat(model_fit$input$model$theta$smooth[[3]],newdata_all)
-	#)
-
+	x_theta_jdate <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[1]],newdata_all)
+	x_theta_year <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[2]],newdata_all)
+	x_theta_tensor <- mgcv::PredictMat(model_fit$input$model$gamma$smooth[[3]],newdata_all)
 	}
 
 	### Separate first by init vs fit
@@ -115,9 +96,16 @@ predict_vals <- function(model_fit, newdata = NULL){
 	} else if (model_fit$fit_params$engine == "sample") {
 		var_list <- c(var_list, c("sigma_mean", "sigma_disp", "sigma_theta"))
 
-		param_est <- model_fit$model_fit$draws(var_list) %>%
-			posterior::as_draws_df() %>%
-			as.data.frame()
+		if (is.null(saved_model)){
+			param_est <- model_fit$model_fit$draws(var_list) %>%
+				posterior::as_draws_df() %>%
+				as.data.frame()
+		} else {
+			param_est <- cmdstanr::read_cmdstan_csv(saved_model, variables = var_list)
+
+			param_est <- posterior::as_draws_df(param_est$post_warmup_draws) %>%
+				as.data.frame()
+		}
 
 		b_0_mean <- param_est %>% select(starts_with("b_0_mean"))
 		b_mean_jdate <- param_est %>% select(starts_with("b_mean_jdate"))
@@ -126,13 +114,13 @@ predict_vals <- function(model_fit, newdata = NULL){
 		sigma_mean <- t(param_est %>% select("sigma_mean"))
 
 		b_0_disp <- param_est %>% select(starts_with("b_0_disp"))
-		b_disp_jdate <- param_est %>% select(starts_with("b_disp_"))
+		b_disp_jdate <- param_est %>% select(starts_with("b_disp_jdate"))
 		disp_0 <- t(b_0_disp)
 		disp_jdate <- x_disp_jdate %*% t(b_disp_jdate)
 		sigma_disp <- t(param_est %>% select("sigma_disp"))
 
 		b_0_theta <- param_est %>% select(starts_with("b_0_theta"))
-		b_theta_jdate <- param_est %>% select(starts_with("b_theta_"))
+		b_theta_jdate <- param_est %>% select(starts_with("b_theta_jdate"))
 		theta_0 <- t(b_0_theta)
 		theta_jdate <- x_theta_jdate %*% t(b_theta_jdate)
 		sigma_theta <- t(param_est %>% select("sigma_theta"))
@@ -282,52 +270,4 @@ predict_vals <- function(model_fit, newdata = NULL){
 	
 
 
-
-
-
-
-#' Extract model output parameters
-#'
-#' This is where you describe the function itself
-#' contains the rownames and the subsequent columns are the sample identifiers.
-#' Any rows with duplicated row names will be dropped with the first one being
-#'
-#' @param data Dataframe with the underlying data. Columns must include variable names
-#' @param spline_type List of spline types. Either cc or cr are accepted. Names must agree with knot_loc
-#' @param knot_loc List of knot locations
-#' @return A matrix of the infile
-#' @export
-extract_params <- function(model_fit, var_list = NULL){
-
-	### Whether cyclic or tensor
-	if(model_fit$input$type == "cyclic" & is.null(var_list) ) {
-
-		var_list <- c("b_0_mean", "b_0_disp", "b_0_theta", "b_mean_jdate", "b_disp_jdate", "b_theta_jdate", "lambda_mean", "lambda_disp", "lambda_theta")
-
-	} else if (model_fit$input$type == "tensor" & is.null(var_list)) {
-
-		var_list <- c("b_0_mean", "b_0_disp", "b_0_theta", "b_mean_jdate", "b_mean_year", "b_mean_tensor", "b_disp_jdate", "b_disp_year", "b_disp_tensor","b_theta_jdate", "b_theta_year", "b_theta_tensor", "lambda_mean", "lambda_disp", "lambda_theta")
-
-	} else {
-		var_list <- var_list
-	}
-
-	### Separate by type of model first
-	if(model_fit$fit_params$engine == "optimize") {
-		model_read <- cmdstanr::read_cmdstan_csv(model_fit$model_fit$output_files(), variables = var_list)
-
-		param_est <- as.data.frame(model_read$point_estimates)
-
-	} else if (model_fit$fit_params$engine == "variational") {
-	
-	
-	} else if (model_fit$fit_params$engine == "sample") {
-	
-
-	}
-
-	return(param_est)
-
-}
-	
 

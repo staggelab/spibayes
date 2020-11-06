@@ -178,6 +178,9 @@ model {
    b_theta_year ~ multi_normal_prec(rep_vector(0, basis_dim_theta[2]), K_theta_year); 
    b_theta_tensor ~ multi_normal_prec(rep_vector(0, basis_dim_theta[3]), K_theta_tensor); 
   
+	sigma_mean ~ cauchy(0, 0.5);
+	sigma_disp ~ cauchy(0, 0.5);
+	sigma_theta ~ cauchy(0, 0.5);
 }
 generated quantities {
 
