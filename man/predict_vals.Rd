@@ -4,14 +4,14 @@
 \alias{predict_vals}
 \title{Extract model output parameters}
 \usage{
-predict_vals(model_fit, newdata = NULL)
+predict_vals(model_fit, newdata = NULL, saved_model = NULL)
 }
 \arguments{
-\item{data}{Dataframe with the underlying data. Columns must include variable names}
+\item{model_fit}{spline object created from fit_model}
 
-\item{spline_type}{List of spline types. Either cc or cr are accepted. Names must agree with knot_loc}
+\item{newdata}{dataframe where you would like new estimates. Defaults to NULL or}
 
-\item{knot_loc}{List of knot locations}
+\item{saved_model}{Simple gives back only the parameters, Marginal gives each marginal}
 }
 \value{
 A matrix of the infile

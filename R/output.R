@@ -1,4 +1,3 @@
-
 #' Extract model output parameters
 #'
 #' This is where you describe the function itself
