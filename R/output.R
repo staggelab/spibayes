@@ -90,9 +90,7 @@ predict_vals <- function(model_fit, newdata = NULL, saved_model = NULL){
 			theta_tensor <- x_theta_tensor %*% t(b_theta_tensor)	
 		}
 
-	} else if (model_fit$fit_params$engine == "variational") {
-	
-	} else if (model_fit$fit_params$engine == "sample") {
+	} else if (model_fit$fit_params$engine == "sample" | model_fit$fit_params$engine == "variational" ) {
 		var_list <- c(var_list, c("sigma_mean", "sigma_disp", "sigma_theta"))
 
 		if (is.null(saved_model)){
@@ -102,8 +100,13 @@ predict_vals <- function(model_fit, newdata = NULL, saved_model = NULL){
 		} else {
 			param_est <- cmdstanr::read_cmdstan_csv(saved_model, variables = var_list)
 
-			param_est <- posterior::as_draws_df(param_est$post_warmup_draws) %>%
-				as.data.frame()
+			if (model_fit$fit_params$engine == "sample"){
+				param_est <- posterior::as_draws_df(param_est$post_warmup_draws) %>%
+					as.data.frame()
+			} else {
+				param_est <- posterior::as_draws_df(param_est$draws) %>%
+					as.data.frame()
+			}
 		}
 
 		b_0_mean <- param_est %>% select(starts_with("b_0_mean"))
