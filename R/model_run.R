@@ -300,6 +300,8 @@ tensor_fit <- function(spi_input, n_chains=1, iter=1000, cores = 1, engine = "sa
 		tensor_mod <- cmdstan_model(system.file("models/tensor_ti_optimize.stan", package = "spibayes"))
 	} else {
 		tensor_mod <- cmdstan_model(system.file("models/tensor_ti.stan", package = "spibayes"))
+
+		#tensor_mod <- cmdstan_model("/media/data/Documents/work_folder/projects_research/code/spibayes/inst/models/tensor_ti.stan)
 	}
 
 

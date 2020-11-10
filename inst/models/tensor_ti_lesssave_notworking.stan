@@ -53,11 +53,7 @@ data {
   matrix[1,2] sigma_theta_prior;
  }
 transformed data {  
-  vector[N_pos] one_vec;
-  vector[N_pos] seven_vec;
-
-  one_vec = rep_vector(1, N_pos) ;
-  seven_vec = rep_vector(-7, N_pos) ;
+ 
 }
 parameters {
   // Come back you might want to put a zero bound
@@ -76,10 +72,6 @@ parameters {
   vector[basis_dim_theta[1]] b_theta_jdate;  
   vector[basis_dim_theta[2]] b_theta_year;  
   vector[basis_dim_theta[3]] b_theta_tensor; 
-
-  vector[N_pos] mean_param;
-  vector[N_pos] disp_param;  
-  vector[N] theta_param; 
 
   vector<lower = 0>[5]  lambda_mean ;
   vector<lower = 0>[5]  lambda_disp ;
@@ -120,29 +112,36 @@ transformed parameters {
 
 } 
 model {
-  vector[N_pos] mu;  
-  vector[N_pos] phi;  
-  vector[N] theta; 
-
-  //vector[N_pos] shape_param;
-  //vector[N_pos] rate_param;  
-
-  mu = b_0_mean + X_mean_jdate * b_mean_jdate + X_mean_year * b_mean_year + X_mean_tensor * b_mean_tensor ;
-  phi = seven_vec + log(one_vec + exp(b_0_disp + X_disp_jdate * b_disp_jdate + X_disp_year * b_disp_year + X_disp_tensor * b_disp_tensor));
-  theta = b_0_theta + X_theta_jdate * b_theta_jdate + X_theta_year * b_theta_year + X_theta_tensor * b_theta_tensor; 
-
-  mean_param ~ normal(mu,sigma_mean);
-  disp_param ~ normal(phi, sigma_disp);
-  theta_param ~ normal(theta, sigma_theta);
-
-  //shape_param = one_vec ./ exp(disp_param);
-  //rate_param = one_vec ./ (exp(mean_param) .* exp(disp_param)) ;
+  real mu_err;  
+  real phi_err; 
 
   // Estimate y values using a gamma distribution, Stan uses shape and inverse scale parameters
-  y_pos ~ gamma(one_vec ./ exp(disp_param),    one_vec ./ (exp(mean_param) .* exp(disp_param)));   // 
+  for (m in 1:N_pos) {
+  	real mean_param;
+    real disp_param;
+    real shape_param;
+    real rate_param;
+
+     mean_param = b_0_mean + X_mean_jdate[m] * b_mean_jdate + X_mean_year[m] * b_mean_year + X_mean_tensor[m] * b_mean_tensor + mu_err;
+     disp_param = -7 + log(1 + exp(b_0_disp + X_disp_jdate[m] * b_disp_jdate + X_disp_year[m] * b_disp_year + X_disp_tensor[m] * b_disp_tensor)) + phi_err;
+
+    shape_param = inv( exp(disp_param ) ) ;
+    rate_param = inv( exp(mean_param ) * exp(disp_param) ) ;
+
+    y_pos[m] ~ gamma(shape_param, rate_param);   // 
+  }
 
   // Estimate zeros using logit model
-  y_zero ~ bernoulli_logit(theta_param);
+  for (j in 1:N) {
+ 	real theta;  
+    real theta_param;
+
+     theta = b_0_theta + X_theta_jdate[j] * b_theta_jdate + X_theta_year[j] * b_theta_year + X_theta_tensor[j] * b_theta_tensor; 
+
+    theta_param ~ normal(theta, sigma_theta);
+
+    y_zero[j] ~ bernoulli_logit(theta_param);   // 
+  }
 
 
   lambda_mean[1] ~ gamma(lambda_mean_prior[1,1], lambda_mean_prior[1,2]);
@@ -177,14 +176,18 @@ model {
    b_theta_jdate ~ multi_normal_prec(rep_vector(0, basis_dim_theta[1]), K_theta_jdate); 
    b_theta_year ~ multi_normal_prec(rep_vector(0, basis_dim_theta[2]), K_theta_year); 
    b_theta_tensor ~ multi_normal_prec(rep_vector(0, basis_dim_theta[3]), K_theta_tensor); 
-  
-  //sigma_mean ~ cauchy(0, 0.5);
-  //sigma_disp ~ cauchy(0, 0.5);
-  //sigma_theta ~ cauchy(0, 0.5);
+
 
   sigma_mean ~ gamma(sigma_mean_prior[1,1], sigma_mean_prior[1,2]);
   sigma_disp ~ gamma(sigma_disp_prior[1,1], sigma_disp_prior[1,2]);
-  sigma_theta ~ gamma(sigma_theta_prior[1,1], sigma_theta_prior[1,2]);
+  //sigma_theta ~ gamma(sigma_theta_prior[1,1], sigma_theta_prior[1,2]);
+
+	//sigma_mean ~ cauchy(0, 0.5);
+	//sigma_disp ~ cauchy(0, 0.5);
+	sigma_theta ~ cauchy(0, 0.5);
+
+   mu_err ~ normal(0, sigma_mean);
+   phi_err ~ normal(0, sigma_disp);
 }
 generated quantities {
 
